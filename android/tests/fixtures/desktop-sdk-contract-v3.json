@@ -1,0 +1,2037 @@
+{
+  "aidl": {
+    "DesktopDisplay.aidl": {
+      "declarations": [
+        "long token",
+        "int displayId",
+        "DesktopRect bounds",
+        "int densityDpi",
+        "boolean secure",
+        "long shellGeneration",
+        "long identityHint"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopRect"
+      ],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopFrame.aidl": {
+      "declarations": [
+        "long topologyRevision",
+        "long focusedDisplayToken",
+        "long focusedToken",
+        "DesktopPlacement[] placements",
+        "DesktopShellRegion[] shellRegions"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopPlacement",
+        "org.wonad.desktop.api.DesktopShellRegion"
+      ],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopLaunchEntry.aidl": {
+      "declarations": [
+        "int index",
+        "String label",
+        "String component"
+      ],
+      "imports": [],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopLaunchPage.aidl": {
+      "declarations": [
+        "long generation",
+        "long catalogId",
+        "long displayToken",
+        "int offset",
+        "int totalEntries",
+        "long expiresAt",
+        "DesktopLaunchEntry[] entries"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopLaunchEntry"
+      ],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopPlacement.aidl": {
+      "declarations": [
+        "long token",
+        "long destinationDisplayToken",
+        "DesktopRect bounds",
+        "boolean visible",
+        "boolean inputEnabled",
+        "int zOrder"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopRect"
+      ],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopRect.aidl": {
+      "declarations": [
+        "int left",
+        "int top",
+        "int right",
+        "int bottom"
+      ],
+      "imports": [],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopShellRegion.aidl": {
+      "declarations": [
+        "long generation",
+        "long displayToken",
+        "DesktopRect bounds"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopRect"
+      ],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopSnapshot.aidl": {
+      "declarations": [
+        "long generation",
+        "long revision",
+        "long topologyRevision",
+        "long capabilities",
+        "DesktopDisplay[] displays",
+        "DesktopTask[] tasks",
+        "long focusedDisplayToken",
+        "long focusedToken",
+        "long identityEpoch",
+        "boolean interactionBlocked"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopDisplay",
+        "org.wonad.desktop.api.DesktopTask"
+      ],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "DesktopTask.aidl": {
+      "declarations": [
+        "long token",
+        "long displayToken",
+        "DesktopRect bounds",
+        "int minimumWidth",
+        "int minimumHeight",
+        "boolean resizable",
+        "boolean visible",
+        "boolean inputEnabled",
+        "int zOrder",
+        "String title",
+        "String packageName"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopRect"
+      ],
+      "kind": "parcelable",
+      "package": "org.wonad.desktop.api"
+    },
+    "IDesktopBroker.aidl": {
+      "declarations": [
+        "int getApiVersion()",
+        "long getCapabilities()",
+        "IDesktopSession openSession(int apiVersion, IDesktopCallback callback)"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.IDesktopCallback",
+        "org.wonad.desktop.api.IDesktopSession"
+      ],
+      "kind": "interface",
+      "package": "org.wonad.desktop.api"
+    },
+    "IDesktopCallback.aidl": {
+      "declarations": [
+        "void onSnapshot(in DesktopSnapshot snapshot)",
+        "void onCommand(long generation, int command, int argument, long taskToken, long displayToken)",
+        "void onResult(long generation, long requestId, int result, long revision)",
+        "void onRevoked(long generation, int reason)"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopSnapshot"
+      ],
+      "kind": "oneway interface",
+      "package": "org.wonad.desktop.api"
+    },
+    "IDesktopSession.aidl": {
+      "declarations": [
+        "oneway void applyFrame(long generation, long requestId, long baseRevision, in DesktopFrame frame)",
+        "oneway void focusTask(long generation, long requestId, long baseRevision, long taskToken)",
+        "oneway void closeTask(long generation, long requestId, long baseRevision, long taskToken)",
+        "oneway void enableShortcuts(long generation, boolean enabled)",
+        "oneway void heartbeat(long generation, long sequence)",
+        "oneway void release(long generation)",
+        "oneway void enableExternalUi(long generation)",
+        "oneway void showShell(long generation, long displayToken)",
+        "@nullable DesktopLaunchPage launcherPage(long generation, long catalogId, long displayToken, int offset)",
+        "oneway void showLauncher(long generation, long catalogId)",
+        "oneway void selectLauncher(long generation, long catalogId, int index)",
+        "oneway void showTransferPicker(long generation, long displayToken)",
+        "oneway void applySignedFrame(long generation, long requestId, long baseRevision, in DesktopFrame frame)"
+      ],
+      "imports": [
+        "org.wonad.desktop.api.DesktopFrame",
+        "org.wonad.desktop.api.DesktopLaunchPage"
+      ],
+      "kind": "interface",
+      "package": "org.wonad.desktop.api"
+    }
+  },
+  "binder_transactions": {
+    "org.wonad.desktop.api.IDesktopBroker": [
+      {
+        "method": "getApiVersion",
+        "offset": 0
+      },
+      {
+        "method": "getCapabilities",
+        "offset": 1
+      },
+      {
+        "method": "openSession",
+        "offset": 2
+      }
+    ],
+    "org.wonad.desktop.api.IDesktopCallback": [
+      {
+        "method": "onSnapshot",
+        "offset": 0
+      },
+      {
+        "method": "onCommand",
+        "offset": 1
+      },
+      {
+        "method": "onResult",
+        "offset": 2
+      },
+      {
+        "method": "onRevoked",
+        "offset": 3
+      }
+    ],
+    "org.wonad.desktop.api.IDesktopSession": [
+      {
+        "method": "applyFrame",
+        "offset": 0
+      },
+      {
+        "method": "focusTask",
+        "offset": 1
+      },
+      {
+        "method": "closeTask",
+        "offset": 2
+      },
+      {
+        "method": "enableShortcuts",
+        "offset": 3
+      },
+      {
+        "method": "heartbeat",
+        "offset": 4
+      },
+      {
+        "method": "release",
+        "offset": 5
+      },
+      {
+        "method": "enableExternalUi",
+        "offset": 6
+      },
+      {
+        "method": "showShell",
+        "offset": 7
+      },
+      {
+        "method": "launcherPage",
+        "offset": 8
+      },
+      {
+        "method": "showLauncher",
+        "offset": 9
+      },
+      {
+        "method": "selectLauncher",
+        "offset": 10
+      },
+      {
+        "method": "showTransferPicker",
+        "offset": 11
+      },
+      {
+        "method": "applySignedFrame",
+        "offset": 12
+      }
+    ]
+  },
+  "constants": {
+    "API_VERSION": "3",
+    "CAP_APK_LAUNCHER": "1L shl 7",
+    "CAP_EXTERNAL_UI": "1L shl 6",
+    "CAP_FRAME": "1L shl 8",
+    "CAP_SHELL": "1L shl 9",
+    "CAP_SHORTCUTS": "1L shl 3",
+    "CAP_SIGNED_PLACEMENT": "1L shl 10",
+    "CAP_TRANSFER_PICKER": "1L shl 5",
+    "CLIENT_TIMEOUT_MILLIS": "5000L",
+    "COMMAND_CLOSE": "10",
+    "COMMAND_EXPAND_MASTER": "6",
+    "COMMAND_FOCUS_MONITOR": "15",
+    "COMMAND_FOCUS_NEXT": "1",
+    "COMMAND_FOCUS_PREVIOUS": "2",
+    "COMMAND_LAUNCH": "12",
+    "COMMAND_MOVE_TO_WORKSPACE": "9",
+    "COMMAND_NEXT_LAYOUT": "7",
+    "COMMAND_SEND_TO_MONITOR": "16",
+    "COMMAND_SHRINK_MASTER": "5",
+    "COMMAND_SINK": "11",
+    "COMMAND_SWAP_NEXT": "3",
+    "COMMAND_SWAP_PREVIOUS": "4",
+    "COMMAND_TOGGLE_FLOATING": "13",
+    "COMMAND_TRANSFER": "14",
+    "COMMAND_VIEW_WORKSPACE": "8",
+    "HEARTBEAT_INTERVAL_MILLIS": "1000L",
+    "LAUNCHER_TIMEOUT_MILLIS": "30000L",
+    "MAX_COORDINATE": "32768",
+    "MAX_DISPLAYS": "9",
+    "MAX_LAUNCH_ENTRIES": "4096",
+    "MAX_LAUNCH_PAGE": "128",
+    "MAX_SHELL_REGIONS": "768",
+    "MAX_TASKS": "128",
+    "RESULT_APPLIED": "0",
+    "RESULT_BUSY": "5",
+    "RESULT_INVALID": "2",
+    "RESULT_PLATFORM_CONSTRAINT": "6",
+    "RESULT_REVOKED": "4",
+    "RESULT_STALE": "1",
+    "RESULT_UNSUPPORTED": "3",
+    "REVOKED_CLIENT_FAILED": "5",
+    "REVOKED_DISABLED": "1",
+    "REVOKED_IDENTITY_CHANGED": "6",
+    "REVOKED_LOCKED": "3",
+    "REVOKED_UNDOCKED": "2",
+    "REVOKED_USER_CHANGED": "4",
+    "SHELL_ACTIVITY": "\".ExternalShellActivity\"",
+    "TRANSACTION_TIMEOUT_MILLIS": "15000L"
+  },
+  "jvm_abi": {
+    "class_files": [
+      "org/wonad/desktop/api/DesktopDisplay$1.class",
+      "org/wonad/desktop/api/DesktopDisplay$_Parcel.class",
+      "org/wonad/desktop/api/DesktopDisplay.class",
+      "org/wonad/desktop/api/DesktopFailure.class",
+      "org/wonad/desktop/api/DesktopFrame$1.class",
+      "org/wonad/desktop/api/DesktopFrame.class",
+      "org/wonad/desktop/api/DesktopLaunchEntry$1.class",
+      "org/wonad/desktop/api/DesktopLaunchEntry.class",
+      "org/wonad/desktop/api/DesktopLaunchPage$1.class",
+      "org/wonad/desktop/api/DesktopLaunchPage.class",
+      "org/wonad/desktop/api/DesktopPlacement$1.class",
+      "org/wonad/desktop/api/DesktopPlacement$_Parcel.class",
+      "org/wonad/desktop/api/DesktopPlacement.class",
+      "org/wonad/desktop/api/DesktopProtocol.class",
+      "org/wonad/desktop/api/DesktopRect$1.class",
+      "org/wonad/desktop/api/DesktopRect.class",
+      "org/wonad/desktop/api/DesktopShellRegion$1.class",
+      "org/wonad/desktop/api/DesktopShellRegion$_Parcel.class",
+      "org/wonad/desktop/api/DesktopShellRegion.class",
+      "org/wonad/desktop/api/DesktopSnapshot$1.class",
+      "org/wonad/desktop/api/DesktopSnapshot.class",
+      "org/wonad/desktop/api/DesktopTask$1.class",
+      "org/wonad/desktop/api/DesktopTask$_Parcel.class",
+      "org/wonad/desktop/api/DesktopTask.class",
+      "org/wonad/desktop/api/IDesktopBroker$Default.class",
+      "org/wonad/desktop/api/IDesktopBroker$Stub$Proxy.class",
+      "org/wonad/desktop/api/IDesktopBroker$Stub.class",
+      "org/wonad/desktop/api/IDesktopBroker.class",
+      "org/wonad/desktop/api/IDesktopCallback$Default.class",
+      "org/wonad/desktop/api/IDesktopCallback$Stub$Proxy.class",
+      "org/wonad/desktop/api/IDesktopCallback$Stub.class",
+      "org/wonad/desktop/api/IDesktopCallback$_Parcel.class",
+      "org/wonad/desktop/api/IDesktopCallback.class",
+      "org/wonad/desktop/api/IDesktopSession$Default.class",
+      "org/wonad/desktop/api/IDesktopSession$Stub$Proxy.class",
+      "org/wonad/desktop/api/IDesktopSession$Stub.class",
+      "org/wonad/desktop/api/IDesktopSession$_Parcel.class",
+      "org/wonad/desktop/api/IDesktopSession.class"
+    ],
+    "classes": {
+      "org/wonad/desktop/api/DesktopDisplay": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopDisplay;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "Lorg/wonad/desktop/api/DesktopRect;",
+            "name": "bounds"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "densityDpi"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "displayId"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "identityHint"
+          },
+          {
+            "access": 1,
+            "descriptor": "Z",
+            "name": "secure"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "shellGeneration"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "token"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopFailure": {
+        "access": 49,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Lorg/wonad/desktop/api/DesktopFailure;",
+            "name": "INSTANCE"
+          }
+        ],
+        "interfaces": [],
+        "methods": [
+          {
+            "access": 17,
+            "descriptor": "(Ljava/lang/Throwable;)Ljava/lang/String;",
+            "name": "describe"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopFrame": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopFrame;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "focusedDisplayToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "focusedToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "[Lorg/wonad/desktop/api/DesktopPlacement;",
+            "name": "placements"
+          },
+          {
+            "access": 1,
+            "descriptor": "[Lorg/wonad/desktop/api/DesktopShellRegion;",
+            "name": "shellRegions"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "topologyRevision"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopLaunchEntry": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopLaunchEntry;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "Ljava/lang/String;",
+            "name": "component"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "index"
+          },
+          {
+            "access": 1,
+            "descriptor": "Ljava/lang/String;",
+            "name": "label"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopLaunchPage": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopLaunchPage;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "catalogId"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "displayToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "[Lorg/wonad/desktop/api/DesktopLaunchEntry;",
+            "name": "entries"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "expiresAt"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "generation"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "offset"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "totalEntries"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopPlacement": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopPlacement;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "Lorg/wonad/desktop/api/DesktopRect;",
+            "name": "bounds"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "destinationDisplayToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "Z",
+            "name": "inputEnabled"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "token"
+          },
+          {
+            "access": 1,
+            "descriptor": "Z",
+            "name": "visible"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "zOrder"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopProtocol": {
+        "access": 49,
+        "fields": [
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 3
+            },
+            "descriptor": "I",
+            "name": "API_VERSION"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 128
+            },
+            "descriptor": "J",
+            "name": "CAP_APK_LAUNCHER"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 64
+            },
+            "descriptor": "J",
+            "name": "CAP_EXTERNAL_UI"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 256
+            },
+            "descriptor": "J",
+            "name": "CAP_FRAME"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 512
+            },
+            "descriptor": "J",
+            "name": "CAP_SHELL"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 8
+            },
+            "descriptor": "J",
+            "name": "CAP_SHORTCUTS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 1024
+            },
+            "descriptor": "J",
+            "name": "CAP_SIGNED_PLACEMENT"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 32
+            },
+            "descriptor": "J",
+            "name": "CAP_TRANSFER_PICKER"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 5000
+            },
+            "descriptor": "J",
+            "name": "CLIENT_TIMEOUT_MILLIS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 10
+            },
+            "descriptor": "I",
+            "name": "COMMAND_CLOSE"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 6
+            },
+            "descriptor": "I",
+            "name": "COMMAND_EXPAND_MASTER"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 15
+            },
+            "descriptor": "I",
+            "name": "COMMAND_FOCUS_MONITOR"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 1
+            },
+            "descriptor": "I",
+            "name": "COMMAND_FOCUS_NEXT"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 2
+            },
+            "descriptor": "I",
+            "name": "COMMAND_FOCUS_PREVIOUS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 12
+            },
+            "descriptor": "I",
+            "name": "COMMAND_LAUNCH"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 9
+            },
+            "descriptor": "I",
+            "name": "COMMAND_MOVE_TO_WORKSPACE"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 7
+            },
+            "descriptor": "I",
+            "name": "COMMAND_NEXT_LAYOUT"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 16
+            },
+            "descriptor": "I",
+            "name": "COMMAND_SEND_TO_MONITOR"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 5
+            },
+            "descriptor": "I",
+            "name": "COMMAND_SHRINK_MASTER"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 11
+            },
+            "descriptor": "I",
+            "name": "COMMAND_SINK"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 3
+            },
+            "descriptor": "I",
+            "name": "COMMAND_SWAP_NEXT"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 4
+            },
+            "descriptor": "I",
+            "name": "COMMAND_SWAP_PREVIOUS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 13
+            },
+            "descriptor": "I",
+            "name": "COMMAND_TOGGLE_FLOATING"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 14
+            },
+            "descriptor": "I",
+            "name": "COMMAND_TRANSFER"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 8
+            },
+            "descriptor": "I",
+            "name": "COMMAND_VIEW_WORKSPACE"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 1000
+            },
+            "descriptor": "J",
+            "name": "HEARTBEAT_INTERVAL_MILLIS"
+          },
+          {
+            "access": 25,
+            "descriptor": "Lorg/wonad/desktop/api/DesktopProtocol;",
+            "name": "INSTANCE"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 30000
+            },
+            "descriptor": "J",
+            "name": "LAUNCHER_TIMEOUT_MILLIS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 32768
+            },
+            "descriptor": "I",
+            "name": "MAX_COORDINATE"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 9
+            },
+            "descriptor": "I",
+            "name": "MAX_DISPLAYS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 4096
+            },
+            "descriptor": "I",
+            "name": "MAX_LAUNCH_ENTRIES"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 128
+            },
+            "descriptor": "I",
+            "name": "MAX_LAUNCH_PAGE"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 768
+            },
+            "descriptor": "I",
+            "name": "MAX_SHELL_REGIONS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 128
+            },
+            "descriptor": "I",
+            "name": "MAX_TASKS"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 0
+            },
+            "descriptor": "I",
+            "name": "RESULT_APPLIED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 5
+            },
+            "descriptor": "I",
+            "name": "RESULT_BUSY"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 2
+            },
+            "descriptor": "I",
+            "name": "RESULT_INVALID"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 6
+            },
+            "descriptor": "I",
+            "name": "RESULT_PLATFORM_CONSTRAINT"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 4
+            },
+            "descriptor": "I",
+            "name": "RESULT_REVOKED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 1
+            },
+            "descriptor": "I",
+            "name": "RESULT_STALE"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 3
+            },
+            "descriptor": "I",
+            "name": "RESULT_UNSUPPORTED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 5
+            },
+            "descriptor": "I",
+            "name": "REVOKED_CLIENT_FAILED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 1
+            },
+            "descriptor": "I",
+            "name": "REVOKED_DISABLED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 6
+            },
+            "descriptor": "I",
+            "name": "REVOKED_IDENTITY_CHANGED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 3
+            },
+            "descriptor": "I",
+            "name": "REVOKED_LOCKED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 2
+            },
+            "descriptor": "I",
+            "name": "REVOKED_UNDOCKED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Integer",
+              "value": 4
+            },
+            "descriptor": "I",
+            "name": "REVOKED_USER_CHANGED"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "String",
+              "value": ".ExternalShellActivity"
+            },
+            "descriptor": "Ljava/lang/String;",
+            "name": "SHELL_ACTIVITY"
+          },
+          {
+            "access": 25,
+            "constant": {
+              "kind": "Long",
+              "value": 15000
+            },
+            "descriptor": "J",
+            "name": "TRANSACTION_TIMEOUT_MILLIS"
+          }
+        ],
+        "interfaces": [],
+        "methods": [],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopRect": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopRect;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "bottom"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "left"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "right"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "top"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopShellRegion": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopShellRegion;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "Lorg/wonad/desktop/api/DesktopRect;",
+            "name": "bounds"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "displayToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "generation"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopSnapshot": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopSnapshot;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "capabilities"
+          },
+          {
+            "access": 1,
+            "descriptor": "[Lorg/wonad/desktop/api/DesktopDisplay;",
+            "name": "displays"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "focusedDisplayToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "focusedToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "generation"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "identityEpoch"
+          },
+          {
+            "access": 1,
+            "descriptor": "Z",
+            "name": "interactionBlocked"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "revision"
+          },
+          {
+            "access": 1,
+            "descriptor": "[Lorg/wonad/desktop/api/DesktopTask;",
+            "name": "tasks"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "topologyRevision"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/DesktopTask": {
+        "access": 33,
+        "fields": [
+          {
+            "access": 25,
+            "descriptor": "Landroid/os/Parcelable$Creator;",
+            "name": "CREATOR",
+            "signature": "Landroid/os/Parcelable$Creator<Lorg/wonad/desktop/api/DesktopTask;>;"
+          },
+          {
+            "access": 1,
+            "descriptor": "Lorg/wonad/desktop/api/DesktopRect;",
+            "name": "bounds"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "displayToken"
+          },
+          {
+            "access": 1,
+            "descriptor": "Z",
+            "name": "inputEnabled"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "minimumHeight"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "minimumWidth"
+          },
+          {
+            "access": 1,
+            "descriptor": "Ljava/lang/String;",
+            "name": "packageName"
+          },
+          {
+            "access": 1,
+            "descriptor": "Z",
+            "name": "resizable"
+          },
+          {
+            "access": 1,
+            "descriptor": "Ljava/lang/String;",
+            "name": "title"
+          },
+          {
+            "access": 1,
+            "descriptor": "J",
+            "name": "token"
+          },
+          {
+            "access": 1,
+            "descriptor": "Z",
+            "name": "visible"
+          },
+          {
+            "access": 1,
+            "descriptor": "I",
+            "name": "zOrder"
+          }
+        ],
+        "interfaces": [
+          "android/os/Parcelable"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "name": "describeContents"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;)V",
+            "name": "readFromParcel"
+          },
+          {
+            "access": 17,
+            "descriptor": "(Landroid/os/Parcel;I)V",
+            "name": "writeToParcel"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopBroker": {
+        "access": 1537,
+        "fields": [
+          {
+            "access": 25,
+            "constant": {
+              "kind": "String",
+              "value": "org.wonad.desktop.api.IDesktopBroker"
+            },
+            "descriptor": "Ljava/lang/String;",
+            "name": "DESCRIPTOR"
+          }
+        ],
+        "interfaces": [
+          "android/os/IInterface"
+        ],
+        "methods": [
+          {
+            "access": 1025,
+            "descriptor": "()I",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "getApiVersion"
+          },
+          {
+            "access": 1025,
+            "descriptor": "()J",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "getCapabilities"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(ILorg/wonad/desktop/api/IDesktopCallback;)Lorg/wonad/desktop/api/IDesktopSession;",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "openSession"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopBroker$Default": {
+        "access": 33,
+        "fields": [],
+        "inner_access": 9,
+        "interfaces": [
+          "org/wonad/desktop/api/IDesktopBroker"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()Landroid/os/IBinder;",
+            "name": "asBinder"
+          },
+          {
+            "access": 1,
+            "descriptor": "()I",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "getApiVersion"
+          },
+          {
+            "access": 1,
+            "descriptor": "()J",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "getCapabilities"
+          },
+          {
+            "access": 1,
+            "descriptor": "(ILorg/wonad/desktop/api/IDesktopCallback;)Lorg/wonad/desktop/api/IDesktopSession;",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "openSession"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopBroker$Stub": {
+        "access": 1057,
+        "fields": [],
+        "inner_access": 1033,
+        "interfaces": [
+          "org/wonad/desktop/api/IDesktopBroker"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()Landroid/os/IBinder;",
+            "name": "asBinder"
+          },
+          {
+            "access": 9,
+            "descriptor": "(Landroid/os/IBinder;)Lorg/wonad/desktop/api/IDesktopBroker;",
+            "name": "asInterface"
+          },
+          {
+            "access": 1,
+            "descriptor": "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onTransact"
+          }
+        ],
+        "super": "android/os/Binder"
+      },
+      "org/wonad/desktop/api/IDesktopCallback": {
+        "access": 1537,
+        "fields": [
+          {
+            "access": 25,
+            "constant": {
+              "kind": "String",
+              "value": "org.wonad.desktop.api.IDesktopCallback"
+            },
+            "descriptor": "Ljava/lang/String;",
+            "name": "DESCRIPTOR"
+          }
+        ],
+        "interfaces": [
+          "android/os/IInterface"
+        ],
+        "methods": [
+          {
+            "access": 1025,
+            "descriptor": "(JIIJJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onCommand"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJIJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onResult"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JI)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onRevoked"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(Lorg/wonad/desktop/api/DesktopSnapshot;)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onSnapshot"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopCallback$Default": {
+        "access": 33,
+        "fields": [],
+        "inner_access": 9,
+        "interfaces": [
+          "org/wonad/desktop/api/IDesktopCallback"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()Landroid/os/IBinder;",
+            "name": "asBinder"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JIIJJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onCommand"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJIJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onResult"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JI)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onRevoked"
+          },
+          {
+            "access": 1,
+            "descriptor": "(Lorg/wonad/desktop/api/DesktopSnapshot;)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onSnapshot"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopCallback$Stub": {
+        "access": 1057,
+        "fields": [],
+        "inner_access": 1033,
+        "interfaces": [
+          "org/wonad/desktop/api/IDesktopCallback"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()Landroid/os/IBinder;",
+            "name": "asBinder"
+          },
+          {
+            "access": 9,
+            "descriptor": "(Landroid/os/IBinder;)Lorg/wonad/desktop/api/IDesktopCallback;",
+            "name": "asInterface"
+          },
+          {
+            "access": 1,
+            "descriptor": "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onTransact"
+          }
+        ],
+        "super": "android/os/Binder"
+      },
+      "org/wonad/desktop/api/IDesktopCallback$_Parcel": {
+        "access": 33,
+        "fields": [],
+        "inner_access": 9,
+        "interfaces": [],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopSession": {
+        "access": 1537,
+        "fields": [
+          {
+            "access": 25,
+            "constant": {
+              "kind": "String",
+              "value": "org.wonad.desktop.api.IDesktopSession"
+            },
+            "descriptor": "Ljava/lang/String;",
+            "name": "DESCRIPTOR"
+          }
+        ],
+        "interfaces": [
+          "android/os/IInterface"
+        ],
+        "methods": [
+          {
+            "access": 1025,
+            "descriptor": "(JJJLorg/wonad/desktop/api/DesktopFrame;)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "applyFrame"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJJLorg/wonad/desktop/api/DesktopFrame;)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "applySignedFrame"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJJJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "closeTask"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(J)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "enableExternalUi"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JZ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "enableShortcuts"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJJJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "focusTask"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "heartbeat"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJJI)Lorg/wonad/desktop/api/DesktopLaunchPage;",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "launcherPage"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(J)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "release"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJI)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "selectLauncher"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "showLauncher"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "showShell"
+          },
+          {
+            "access": 1025,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "showTransferPicker"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopSession$Default": {
+        "access": 33,
+        "fields": [],
+        "inner_access": 9,
+        "interfaces": [
+          "org/wonad/desktop/api/IDesktopSession"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJJLorg/wonad/desktop/api/DesktopFrame;)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "applyFrame"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJJLorg/wonad/desktop/api/DesktopFrame;)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "applySignedFrame"
+          },
+          {
+            "access": 1,
+            "descriptor": "()Landroid/os/IBinder;",
+            "name": "asBinder"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJJJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "closeTask"
+          },
+          {
+            "access": 1,
+            "descriptor": "(J)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "enableExternalUi"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JZ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "enableShortcuts"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJJJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "focusTask"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "heartbeat"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJJI)Lorg/wonad/desktop/api/DesktopLaunchPage;",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "launcherPage"
+          },
+          {
+            "access": 1,
+            "descriptor": "(J)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "release"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJI)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "selectLauncher"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "showLauncher"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "showShell"
+          },
+          {
+            "access": 1,
+            "descriptor": "(JJ)V",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "showTransferPicker"
+          }
+        ],
+        "super": "java/lang/Object"
+      },
+      "org/wonad/desktop/api/IDesktopSession$Stub": {
+        "access": 1057,
+        "fields": [],
+        "inner_access": 1033,
+        "interfaces": [
+          "org/wonad/desktop/api/IDesktopSession"
+        ],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          },
+          {
+            "access": 1,
+            "descriptor": "()Landroid/os/IBinder;",
+            "name": "asBinder"
+          },
+          {
+            "access": 9,
+            "descriptor": "(Landroid/os/IBinder;)Lorg/wonad/desktop/api/IDesktopSession;",
+            "name": "asInterface"
+          },
+          {
+            "access": 1,
+            "descriptor": "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z",
+            "exceptions": [
+              "android/os/RemoteException"
+            ],
+            "name": "onTransact"
+          }
+        ],
+        "super": "android/os/Binder"
+      },
+      "org/wonad/desktop/api/IDesktopSession$_Parcel": {
+        "access": 33,
+        "fields": [],
+        "inner_access": 9,
+        "interfaces": [],
+        "methods": [
+          {
+            "access": 1,
+            "descriptor": "()V",
+            "name": "<init>"
+          }
+        ],
+        "super": "java/lang/Object"
+      }
+    },
+    "schema": 1
+  },
+  "kotlin_api": {
+    "DesktopFailure.kt": {
+      "declarations": [
+        {
+          "descriptor": "(Ljava/lang/Throwable;)Ljava/lang/String;",
+          "kind": "method",
+          "name": "describe"
+        }
+      ],
+      "kind": "object",
+      "package": "org.wonad.desktop.api"
+    }
+  },
+  "schema": 3,
+  "scope": "source_and_published_jvm_compatibility_not_runtime_qualification",
+  "signature_sha256": "db6ac649c34d8c25ab0bdd4a46802639deb3972d376070c6c3cdd811d7962fff"
+}

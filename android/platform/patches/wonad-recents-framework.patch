@@ -1,0 +1,72 @@
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt
+@@ -7075,6 +7075,42 @@ class DesktopTasksController(
+             }
+         }
+ 
++        override fun canSendTaskToWonad(
++            taskId: Int,
++            userId: Int,
++            lastActiveTime: Long,
++            baseActivity: ComponentName?,
++            taskToken: IBinder?,
++        ): Boolean {
++            val caller = Binder.getCallingUid()
++            var allowed = false
++            executeRemoteCallWithTaskPermission(controller, "canSendTaskToWonad", { _ ->
++                val wonad = org.wonad.desktop.broker.WonadController.instance
++                allowed = wonad != null && wonad.trustedRecentsCaller(caller) &&
++                    wonad.canTransferFromRecents(taskId, userId, lastActiveTime, baseActivity,
++                        taskToken)
++            }, true /* blocking */)
++            return allowed
++        }
++
++        override fun sendTaskToWonad(
++            taskId: Int,
++            userId: Int,
++            lastActiveTime: Long,
++            baseActivity: ComponentName?,
++            taskToken: IBinder?,
++        ): Boolean {
++            val caller = Binder.getCallingUid()
++            var moved = false
++            executeRemoteCallWithTaskPermission(controller, "sendTaskToWonad", { _ ->
++                val wonad = org.wonad.desktop.broker.WonadController.instance
++                moved = wonad != null && wonad.trustedRecentsCaller(caller) &&
++                    wonad.transferFromRecents(taskId, userId, lastActiveTime, baseActivity,
++                        taskToken)
++            }, true /* blocking */)
++            return moved
++        }
++
+         override fun startLaunchIntentTransition(
+             pendingIntent: PendingIntent,
+             options: Bundle,
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl
+@@ -18,6 +18,8 @@ package com.android.wm.shell.desktopmode.api;
+ 
+ import android.app.ActivityManager.RunningTaskInfo;
+ import android.app.PendingIntent;
++import android.content.ComponentName;
++import android.os.IBinder;
+ import android.os.Bundle;
+ import android.window.RemoteTransition;
+ import com.android.wm.shell.desktopmode.IDesktopTaskListener;
+@@ -112,6 +113,13 @@ interface IDesktopMode {
+     /** Move a task with given `taskId` to external display */
+     void moveToExternalDisplay(int taskId, in DesktopModeTransitionSource transitionSource);
+ 
++    /** Trusted phone Recents entry point. Observations identify one live task;
++     * only Wonad's OS adapter chooses the destination and performs the move. */
++    boolean canSendTaskToWonad(int taskId, int userId, long lastActiveTime,
++            in ComponentName baseActivity, in IBinder taskToken);
++    boolean sendTaskToWonad(int taskId, int userId, long lastActiveTime,
++            in ComponentName baseActivity, in IBinder taskToken);
++
+     /** Start a transition when launching an intent in desktop mode */
+     void startLaunchIntentTransition(in PendingIntent pendingIntent, in Bundle options, in int displayId);
+ }

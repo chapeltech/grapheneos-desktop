@@ -1,0 +1,28 @@
+diff --git a/services/core/java/com/android/server/wm/ActivityStarter.java b/services/core/java/com/android/server/wm/ActivityStarter.java
+--- a/services/core/java/com/android/server/wm/ActivityStarter.java
++++ b/services/core/java/com/android/server/wm/ActivityStarter.java
+@@ -2383,6 +2383,12 @@
+             return START_CLASS_NOT_FOUND;
+         }
+ 
++        // Retire/reject only the resolved platform Shell wallpaper on a
++        // native-owned attachment. Phone/default HOME policy is unchanged.
++        if (WonadNativeWallpapers.rejectsLaunch(mPreferredTaskDisplayArea, r)) {
++            return START_CANCELED;
++        }
++
+         // Do not start home activity if it cannot be launched on preferred display. We are not
+         // doing this in ActivityTaskSupervisor#canPlaceEntityOnDisplay because it might
+         // fallback to launch on other displays.
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -1832,6 +1832,8 @@
+                     ProtoLog.w(WM_ERROR, "Attempted to add window with exiting application token "
+                             + ".%s Aborting.", token);
+                     return WindowManagerGlobal.ADD_APP_EXITING;
++                } else if (WonadNativeWallpapers.rejectsWindow(displayContent, activity)) {
++                    return WindowManagerGlobal.ADD_INVALID_TYPE;
+                 } else if (type == TYPE_APPLICATION_STARTING) {
+                     if (activity.mStartingWindow != null) {
+                         ProtoLog.w(WM_ERROR, "Attempted to add starting window to "

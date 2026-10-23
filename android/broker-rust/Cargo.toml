@@ -1,0 +1,25 @@
+[package]
+name = "wonad-broker-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+license = "LGPL-2.1-or-later"
+
+[features]
+# Product selection, never inferred from the compilation architecture.
+default = []
+pixel10-shortcuts = []
+
+[lib]
+path = "src/lib.rs"
+
+[profile.release]
+overflow-checks = true
+panic = "abort"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"

@@ -1,0 +1,22 @@
+diff --git a/services/core/java/com/android/server/wm/Task.java b/services/core/java/com/android/server/wm/Task.java
+--- a/services/core/java/com/android/server/wm/Task.java
++++ b/services/core/java/com/android/server/wm/Task.java
+@@ -2416,4 +2416,8 @@
+         // Use Display specific min sizes when there is one associated with this Task.
+-        final int defaultMinSizeDp = mDisplayContent == null
++        // Native Wonad owns external placement. Keep application-requested
++        // minima below, but do not add Android's synthetic caption/touch-target
++        // minimum to an exact ordinary leaf on a native attachment.
++        final int defaultMinSizeDp = WonadNativeBridge.usesClientBounds(this) ? 0
++                : mDisplayContent == null
+                 ? DEFAULT_MIN_TASK_SIZE_DP : mDisplayContent.mMinSizeOfResizeableTaskDp;
+         final float density = (float) parentConfig.densityDpi / DisplayMetrics.DENSITY_DEFAULT;
+@@ -2465,4 +2469,8 @@
+     private void computeFreeformBounds(@NonNull Rect outBounds,
+             @NonNull Configuration newParentConfig) {
++        // The native adapter has already validated this ordinary leaf's exact
++        // full-monitor rectangle. Stock caption/stable-inset fitting must not
++        // reposition it; phone/system/fixed UI and non-native tasks stay stock.
++        if (WonadNativeBridge.usesClientBounds(this)) return;
+         // by policy, make sure the window remains within parent somewhere
+         final float density =

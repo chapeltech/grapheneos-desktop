@@ -1,0 +1,12 @@
+diff --git a/services/core/java/com/android/server/wm/Task.java b/services/core/java/com/android/server/wm/Task.java
+--- a/services/core/java/com/android/server/wm/Task.java
++++ b/services/core/java/com/android/server/wm/Task.java
+@@ -4704,3 +4704,8 @@
+     boolean setForceHidden(@FlagForceHidden int flags, boolean set) {
++        // A parked Wonad screen hides content without leaving its desk. The
++        // stock moveToBack path reparents organizer children behind Home.
++        if (flags == FLAG_FORCE_HIDDEN_FOR_WONAD) {
++            return super.setForceHidden(flags, set);
++        }
+         final boolean wasHidden = isForceHidden();
+         final boolean wasVisible = isVisible();

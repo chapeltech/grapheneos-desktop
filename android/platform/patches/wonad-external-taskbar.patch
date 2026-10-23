@@ -1,0 +1,24 @@
+diff --git a/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java b/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
+--- a/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
++++ b/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
+@@ -432,3 +432,2 @@
+-            if (!DesktopExperienceFlags.ENABLE_SYS_DECORS_CALLBACKS_VIA_WM.isTrue()
+-                    && !wm.shouldShowSystemDecors(displayId)) {
++            if (!wm.shouldShowSystemDecors(displayId)) {
+                 debugTaskbarManager(
+@@ -720,4 +719,15 @@
+         Preconditions.assertTaskbarUiThread();
+         resource.debugMsg("recreateTaskbarForDisplay");
++        // Decoration removal can race already queued configuration callbacks.
++        // Recheck native ownership before asking the per-display repository for
++        // objects which it has already removed. Never recreate an external
++        // Android taskbar on a screen claimed by Wonad.
++        WindowManager wm = mBaseContext.getSystemService(WindowManager.class);
++        if (resource.isExternalDisplay()
++                && (wm == null || !wm.shouldShowSystemDecors(resource.getDisplayId()))) {
++            resource.destroyTaskbarForDisplay();
++            resource.removeTaskbarRootViewFromWindow();
++            return;
++        }
+         String traceName = "recreateTaskbarForDisplay: caller=" + caller;
+         String traceNameTruncated = traceName.substring(0, Math.min(traceName.length(), 80));

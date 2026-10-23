@@ -1,0 +1,17 @@
+diff --git a/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java b/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java
+--- a/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java
++++ b/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java
+@@ -138,3 +138,6 @@
+     boolean hasWonadRegion(Region expected) {
+         return !mChanged && !mHandle.replaceTouchableRegionWithCrop
++                && (mHandle.inputConfig & (InputConfig.NOT_VISIBLE
++                        | InputConfig.PAUSE_DISPATCHING
++                        | InputConfig.DROP_INPUT_IF_OBSCURED)) == 0
+                 && mHandle.touchableRegion.equals(expected)
+@@ -148,3 +151,6 @@
+     boolean hasWonadObserver(Region expected) {
+         return !mChanged && !mHandle.replaceTouchableRegionWithCrop
++                && (mHandle.inputConfig & (InputConfig.NOT_VISIBLE
++                        | InputConfig.PAUSE_DISPATCHING
++                        | InputConfig.DROP_INPUT_IF_OBSCURED)) == 0
+                 && mHandle.touchableRegion.equals(expected)

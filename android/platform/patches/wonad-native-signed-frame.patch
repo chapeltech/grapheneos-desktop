@@ -1,0 +1,31 @@
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -1273,4 +1273,7 @@
+     boolean applyWonadNativeFrame(int userId, long generation, IBinder owner,
+             in IBinder[] taskTokens, in int[] expectedUids, in long[] current, in long[] desired);
++
++    boolean applyWonadNativeSignedFrame(int userId, long generation, IBinder owner,
++            in IBinder[] taskTokens, in int[] expectedUids, in long[] current, in long[] desired);
+     boolean isWonadNativeFrameApplied(int userId, long generation, IBinder owner,
+             in IBinder[] taskTokens, in int[] expectedUids, in long[] current, in long[] desired);
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8348,9 +8348,16 @@
+     public boolean applyWonadNativeFrame(int userId, long generation, IBinder owner,
+             IBinder[] taskTokens, int[] expectedUids, long[] current, long[] desired) {
+         return WonadNativeBridge.applyFrame(this, userId, generation, owner,
+                 taskTokens, expectedUids, current, desired);
+     }
+ 
++    @Override
++    public boolean applyWonadNativeSignedFrame(int userId, long generation, IBinder owner,
++            IBinder[] taskTokens, int[] expectedUids, long[] current, long[] desired) {
++        return WonadNativeBridge.applySignedFrame(this, userId, generation, owner,
++                taskTokens, expectedUids, current, desired);
++    }
++
+     @Override
+     public boolean isWonadNativeFrameApplied(int userId, long generation, IBinder owner,
+             IBinder[] taskTokens, int[] expectedUids, long[] current, long[] desired) {

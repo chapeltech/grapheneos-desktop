@@ -1,0 +1,346 @@
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -1781,6 +1781,10 @@
+             // If this is a child window, we want to apply the same type checking rules as the
+             // parent window type.
+             final int rootType = hasParent ? parentWindow.mAttrs.type : type;
++            // Serialize native takeover with actual root-type admission.
++            if (WonadNativeDecorations.rejects(displayContent, rootType)) {
++                return WindowManagerGlobal.ADD_INVALID_TYPE;
++            }
+ 
+             boolean addToastWindowRequiresToken = false;
+ 
+diff --git a/packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt b/packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt
+--- a/packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt
++++ b/packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt
+@@ -162,16 +162,23 @@
+     @SysUISingleton
+     @DisplayLib
+     fun providesDisplaysWithDecorationsRepositoryFromLib(
+-        displayLibComponent: DisplayLibComponent
++        displayLibComponent: DisplayLibComponent,
++        @Background bgApplicationScope: CoroutineScope,
+     ): DisplaysWithDecorationsRepository {
+-        return displayLibComponent.displaysWithDecorationsRepository
++        return com.android.systemui.display.data.repository.WonadDecorationsRepository(
++            displayLibComponent.displaysWithDecorationsRepository,
++            displayLibComponent.displayRepository,
++            bgApplicationScope,
++        )
+     }
+ 
+     @Provides
+     @SysUISingleton
+     fun providesDisplaysWithDecorationsRepositoryCompatFromLib(
+-        displayLibComponent: DisplayLibComponent
++        @DisplayLib repository: DisplaysWithDecorationsRepository,
++        @Background bgApplicationScope: CoroutineScope,
+     ): DisplaysWithDecorationsRepositoryCompat {
+-        return displayLibComponent.displaysWithDecorationsRepositoryCompat
++        // Navbar/Taskbar listeners must consume the SAME guarded repository.
++        return DisplaysWithDecorationsRepositoryCompat(bgApplicationScope, repository)
+     }
+ }
+diff --git a/packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt b/packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt
+new file mode 100644
+--- /dev/null
++++ b/packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt
+@@ -0,0 +1,35 @@
++package com.android.systemui.display.data.repository
++
++import android.view.Display
++import com.android.app.displaylib.DisplaysWithDecorationsRepository
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.flow.SharingStarted
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.stateIn
++import org.wonad.desktop.broker.WonadNativeUi
++
++/** Guards the enabled WM-callback repository WITHOUT altering displaylib.
++ * Keep ordinary removal semantics; ownership is rechecked when queued raw
++ * states are consumed, and the final WM add guard closes the admission race.
++ */
++internal class WonadDecorationsRepository(
++    upstream: DisplaysWithDecorationsRepository,
++    displays: com.android.app.displaylib.DisplayRepository,
++    scope: CoroutineScope,
++) : DisplaysWithDecorationsRepository {
++    private fun filter(ids: Set<Int>, connected: Set<Int>): Set<Int> =
++        ids.filterTo(linkedSetOf()) {
++            it in connected && (it == Display.DEFAULT_DISPLAY ||
++                WonadNativeUi.allowStockDecorations(it))
++        }
++
++    override val displayIdsWithSystemDecorations: StateFlow<Set<Int>> =
++        combine(upstream.displayIdsWithSystemDecorations, displays.displayIds) { ids, connected ->
++            filter(ids, connected)
++        }.stateIn(
++            scope,
++            SharingStarted.Eagerly,
++            filter(upstream.displayIdsWithSystemDecorations.value, displays.displayIds.value),
++        )
++}
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java b/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java
+@@ -58,6 +58,7 @@
+ import com.android.systemui.res.R;
+ import com.android.systemui.statusbar.data.repository.StatusBarConfigurationController;
+ import com.android.systemui.statusbar.layout.StatusBarContentInsetsProvider;
++import com.android.systemui.statusbar.layout.StatusBarContentInsetsChangedListener;
+ import com.android.systemui.statusbar.policy.ConfigurationController;
+ import com.android.systemui.statusbar.window.StatusBarWindowModule.InternalWindowViewInflater;
+ import com.android.systemui.unfold.UnfoldTransitionProgressProvider;
+@@ -95,6 +96,8 @@
+     private WindowManager.LayoutParams mLp;
+     private final WindowManager.LayoutParams mLpChanged;
+     private final Binder mInsetsSourceOwner = new Binder();
++    private final StatusBarContentInsetsChangedListener mInsetsChangedListener =
++            this::calculateStatusBarLocationsForAllRotations;
+ 
+     private final ConfigurationController.ConfigurationListener mConfigurationListener =
+             new ConfigurationController.ConfigurationListener() {
+@@ -162,6 +165,11 @@
+ 
+     @Override
+     public void attach() {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(mDisplayId)) {
++            stop();
++            return;
++        }
++        if (mIsAttached) return;
+         mStatusBarWindowView.setStatusBarConfigurationController(mStatusBarConfigurationController);
+         // Now that the status bar window encompasses the sliding panel and its
+         // translucent backdrop, the entire thing is made TRANSLUCENT and is
+@@ -183,12 +191,18 @@
+                             + mContext.getDisplayId()
+                             + " doesn't exist anymore.",
+                     e);
++            return;
++        }
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(mDisplayId)) {
++            mIsAttached = true; // The real add succeeded; remove that exact client view.
++            stop();
++            return;
+         }
+         mStatusBarConfigurationController.addCallback(mConfigurationListener);
+         refreshStatusBarHeight();
+         mLpChanged.copyFrom(mLp);
+ 
+-        mContentInsetsProvider.addCallback(this::calculateStatusBarLocationsForAllRotations);
++        mContentInsetsProvider.addCallback(mInsetsChangedListener);
+         calculateStatusBarLocationsForAllRotations();
+         mIsAttached = true;
+         apply(mCurrentState);
+@@ -196,6 +210,8 @@
+ 
+     @Override
+     public void stop() {
++        if (!mIsAttached) return;
++        mIsAttached = false;
+         try {
+             mWindowManager.removeView(mStatusBarWindowView);
+             mMultiDisplayLogger.logStatusBarWindowRemoved(mDisplayId);
+@@ -208,6 +224,7 @@
+             Log.e(TAG, "Failed to remove View from WindowManager. View was not attached", e);
+         }
+         mStatusBarConfigurationController.removeCallback(mConfigurationListener);
++        mContentInsetsProvider.removeCallback(mInsetsChangedListener);
+     }
+ 
+     @Override
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt b/packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt
+@@ -164,6 +164,12 @@
+ 
+     /** Starts status bar orchestration. To be called when status bar is created. */
+     fun start() {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) {
++            stop()
++            statusBarWindowController.stop()
++            return
++        }
++        if (startJob?.isActive == true) return
+         startJob =
+             coroutineScope
+                 // Perform animations on the main thread to prevent crashes.
+@@ -190,6 +196,11 @@
+                     launch { autoHideUpdate.collect { autoHideController.touchAutoHide() } }
+                 }
+         createAndAddWindow()
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) {
++            stop()
++            statusBarWindowController.stop()
++            return
++        }
+         setupPluginDependencies()
+         setUpAutoHide()
+         statusBarIconRefreshInteractor.start()
+diff --git a/packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java b/packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java
+--- a/packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java
++++ b/packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java
+@@ -410,6 +410,10 @@
+         }
+ 
+         final int displayId = display.getDisplayId();
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) {
++            removeNavigationBar(displayId);
++            return;
++        }
+         final boolean isOnDefaultDisplay = displayId == mDisplayTracker.getDefaultDisplayId();
+ 
+         if (!canCreateNavBarOrTaskBar(displayId)) {
+@@ -437,6 +441,11 @@
+                 context, savedState);
+         NavigationBar navBar = component.getNavigationBar();
+         navBar.init();
++        if (!navBar.isWindowAdded()) return;
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) {
++            navBar.destroyView();
++            return;
++        }
+         mNavigationBars.put(displayId, navBar);
+ 
+         navBar.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+diff --git a/packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java b/packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java
+--- a/packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java
++++ b/packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java
+@@ -232,6 +232,7 @@
+     private final int mNavColorSampleMargin;
+     private EdgeBackGestureHandler mEdgeBackGestureHandler;
+     private NavigationBarFrame mFrame;
++    private boolean mWindowAdded;
+     private MotionEvent mCurrentDownEvent;
+ 
+     private @WindowVisibleState int mNavigationBarWindowState = WINDOW_STATE_SHOWING;
+@@ -699,6 +700,10 @@
+ 
+     @Override
+     public void onInit() {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(mContext.getDisplayId())) {
++            mNavigationModeController.removeListener(mModeChangedListener);
++            return;
++        }
+         // TODO: A great deal of this code should probably live in onViewAttached.
+         // It should also has corresponding cleanup in onViewDetached.
+         mView.setBarTransitions(mNavigationBarTransitions);
+@@ -733,7 +738,14 @@
+                             + mDisplayId
+                             + " does not exist anymore",
+                     e);
+-        }
++            // No callbacks below this point have been registered yet.
++            mNavigationModeController.removeListener(mModeChangedListener);
++            mEdgeBackGestureHandler.setStateChangeCallback(null);
++            mEdgeBackGestureHandler.setButtonForcedVisibleChangeCallback(null);
++            mNavigationBarTransitions.destroy();
++            return;
++        }
++        mWindowAdded = true;
+         mDisplayId = mContext.getDisplayId();
+         mIsOnDefaultDisplay = mDisplayId == mDisplayTracker.getDefaultDisplayId();
+ 
+@@ -767,7 +779,12 @@
+         mTaskStackChangeListeners.registerTaskStackListener(mTaskStackListener);
+     }
+ 
++    public boolean isWindowAdded() {
++        return mWindowAdded;
++    }
++
+     public void destroyView() {
++        mWindowAdded = false;
+         Trace.beginSection("NavigationBar#destroyView");
+         try {
+             setAutoHideController(/* autoHideController */ null);
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt b/packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt
+@@ -59,12 +59,21 @@
+ ) {
+     private val dotWindowViewsByCorner = mutableMapOf<PrivacyDotCorner, View>()
+     private var displayRotationOnStartup = 0
++    private var started = false
++    private var lifecycle = Any()
+ 
+     fun start() {
+         uiExecutor.execute { startOnUiThread() }
+     }
+ 
+     private fun startOnUiThread() {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) {
++            stopOnUiThread()
++            return
++        }
++        if (started) return
++        started = true
++        val scope = Any().also { lifecycle = it }
+         displayRotationOnStartup = inflater.context.display.rotation
+ 
+         val providers = dotFactory.providers
+@@ -86,6 +95,8 @@
+             object : PrivacyDotViewController.ShowingListener {
+ 
+                 override fun onPrivacyDotShown(v: View?) {
++                    if (!started || lifecycle !== scope ||
++                        !org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) return
+                     val dotViewContainer = dotViewContainersByView[v]
+                     if (v == null || dotViewContainer == null) {
+                         return
+@@ -93,11 +104,13 @@
+                     if (dotWindowViewsByCorner.containsKey(dotViewContainer.corner)) {
+                         return
+                     }
+-                    v.addToWindow(dotViewContainer.corner)
+-                    dotWindowViewsByCorner[dotViewContainer.corner] = dotViewContainer.windowView
++                    if (v.addToWindow(dotViewContainer.corner)) {
++                        dotWindowViewsByCorner[dotViewContainer.corner] = dotViewContainer.windowView
++                    }
+                 }
+ 
+                 override fun onPrivacyDotHidden(v: View?) {
++                    if (!started || lifecycle !== scope) return
+                     val dotViewContainer = dotViewContainersByView[v]
+                     val corner = dotViewContainer?.corner ?: return
+                     val windowView = dotWindowViewsByCorner.remove(corner) ?: return
+@@ -123,7 +136,8 @@
+         return DotViewContainer(windowView, dotView, corner)
+     }
+ 
+-    private fun View.addToWindow(corner: PrivacyDotCorner) {
++    private fun View.addToWindow(corner: PrivacyDotCorner): Boolean {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) return false
+         val excludeFromScreenshots = displayId == Display.DEFAULT_DISPLAY
+         val params =
+             ScreenDecorations.getWindowLayoutBaseParams(excludeFromScreenshots).apply {
+@@ -144,15 +158,21 @@
+                 "Unable to add view to WM. Display with id $displayId does not exist anymore",
+                 e,
+             )
++            return false
+         }
+-        return
++        return true
+     }
+ 
+     fun stop() {
+-        uiExecutor.execute {
+-            privacyDotViewController.showingListener = null
+-            dotWindowViewsByCorner.forEach { windowManager.removeViewSafely(it.value, it.key) }
+-        }
++        uiExecutor.execute { stopOnUiThread() }
++    }
++
++    private fun stopOnUiThread() {
++        started = false
++        lifecycle = Any()
++        privacyDotViewController.showingListener = null
++        dotWindowViewsByCorner.forEach { windowManager.removeViewSafely(it.value, it.key) }
++        dotWindowViewsByCorner.clear()
+     }
+ 
+     private data class DotViewContainer(

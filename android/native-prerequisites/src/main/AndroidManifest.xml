@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="org.wonad.desktop" />
+        <package android:name="com.android.systemui" />
+    </queries>
+    <instrumentation android:name="org.wonad.desktop.prerequisites.NativePrerequisitesInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <application android:label="Wonad native prerequisites" android:allowBackup="false" android:testOnly="true" />
+</manifest>

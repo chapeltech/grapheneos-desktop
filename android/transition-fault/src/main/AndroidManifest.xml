@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <instrumentation android:name="org.wonad.desktop.transitionfault.TransitionDelayInstrumentation"
+        android:targetPackage="com.android.systemui" android:targetProcesses="com.android.systemui"
+        android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.transitionfault.NativeCompletionProofInstrumentation"
+        android:targetPackage="com.android.systemui" android:targetProcesses="com.android.systemui"
+        android:functionalTest="true" />
+    <application android:label="Wonad isolated transition fault test" android:allowBackup="false"
+        android:usesCleartextTraffic="false" android:testOnly="true" />
+</manifest>

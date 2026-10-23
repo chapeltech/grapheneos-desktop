@@ -1,0 +1,9 @@
+diff --git a/services/core/java/com/android/server/wm/DisplayContent.java b/services/core/java/com/android/server/wm/DisplayContent.java
+--- a/services/core/java/com/android/server/wm/DisplayContent.java
++++ b/services/core/java/com/android/server/wm/DisplayContent.java
+@@ -6879,4 +6879,5 @@
+     void remove() {
+         mRemoving = true;
++        WonadUiBridge.onRemoved(this);
+ 
+         clearAllTasksOnDisplay(() -> {

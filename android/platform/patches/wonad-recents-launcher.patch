@@ -1,0 +1,151 @@
+diff --git a/quickstep/res/values/strings.xml b/quickstep/res/values/strings.xml
+--- a/quickstep/res/values/strings.xml
++++ b/quickstep/res/values/strings.xml
+@@ -31,5 +31,7 @@
+     <string name="recent_split_task_option_desktop">Desktop for %1$s</string>
+     <!-- Title and content description for an option to move app to external display. -->
+     <string name="recent_task_option_external_display">Move to external display</string>
++    <string name="recent_task_option_send_to_wonad">Send to Wonad</string>
++    <string name="wonad_transfer_unavailable">Wonad could not move this app</string>
+     <!-- Title and content description for an option to remove the task [CHAR LIMIT=30] -->
+     <string name="recent_task_option_remove_task">Clear</string>
+diff --git a/quickstep/src/com/android/launcher3/dagger/Modules.kt b/quickstep/src/com/android/launcher3/dagger/Modules.kt
+--- a/quickstep/src/com/android/launcher3/dagger/Modules.kt
++++ b/quickstep/src/com/android/launcher3/dagger/Modules.kt
+@@ -77,6 +77,7 @@ import com.android.quickstep.AspectRatioSystemShortcut
+ import com.android.quickstep.AutomationRepositoryImpl
+ import com.android.quickstep.DesktopShortcut
+ import com.android.quickstep.ExternalDisplayShortcut
++import com.android.quickstep.WonadSendShortcut
+ import com.android.quickstep.InstantAppResolverImpl
+ import com.android.quickstep.LauncherRestoreEventLoggerImpl
+ import com.android.quickstep.QuickstepTestInformationHandler
+@@ -331,6 +332,7 @@ object TaskOverlayModule {
+     fun providePerTaskShortcutFactories(
+         desktopShortcutFactory: DesktopShortcut.Factory,
+         externalDisplayShortcutFactory: ExternalDisplayShortcut.Factory,
++        wonadSendShortcutFactory: WonadSendShortcut.Factory,
+         aspectRatioSystemShortcutFactory: AspectRatioSystemShortcut.Factory,
+         wellbeingShortcutFactory: WellbeingShortcut.Factory,
+     ): List<TaskShortcutFactory> =
+@@ -342,6 +344,7 @@ object TaskOverlayModule {
+             TaskShortcutFactory.FREE_FORM,
+             desktopShortcutFactory,
+             externalDisplayShortcutFactory,
++            wonadSendShortcutFactory,
+             aspectRatioSystemShortcutFactory,
+             wellbeingShortcutFactory,
+             TaskShortcutFactory.SAVE_APP_PAIR,
+diff --git a/quickstep/src/com/android/quickstep/SystemUiProxy.kt b/quickstep/src/com/android/quickstep/SystemUiProxy.kt
+--- a/quickstep/src/com/android/quickstep/SystemUiProxy.kt
++++ b/quickstep/src/com/android/quickstep/SystemUiProxy.kt
+@@ -1277,6 +1277,25 @@ constructor(
+             desktopMode?.moveToExternalDisplay(taskId, transitionSource)
+         }
+ 
++    /** Only a healthy Wonad session and the exact live phone task are offered
++     * by the OS. Recents never chooses a monitor or sends a window transaction.
++     */
++    fun canSendTaskToWonad(taskId: Int, userId: Int, lastActive: Long,
++        baseActivity: ComponentName?, taskToken: IBinder?): Boolean = try {
++        desktopMode?.canSendTaskToWonad(taskId, userId, lastActive, baseActivity, taskToken) == true
++    } catch (error: RemoteException) {
++        Log.w(TAG, "Failed call canSendTaskToWonad", error)
++        false
++    }
++
++    fun sendTaskToWonad(taskId: Int, userId: Int, lastActive: Long,
++        baseActivity: ComponentName?, taskToken: IBinder?): Boolean = try {
++        desktopMode?.sendTaskToWonad(taskId, userId, lastActive, baseActivity, taskToken) == true
++    } catch (error: RemoteException) {
++        Log.w(TAG, "Failed call sendTaskToWonad", error)
++        false
++    }
++
+     //
+     // Recents
+     //
+diff --git a/quickstep/src/com/android/quickstep/views/RecentsView.java b/quickstep/src/com/android/quickstep/views/RecentsView.java
+--- a/quickstep/src/com/android/quickstep/views/RecentsView.java
++++ b/quickstep/src/com/android/quickstep/views/RecentsView.java
+@@ -5929,5 +5929,24 @@ public abstract class RecentsView<
+         successCallback.run();
+     }
+ 
++    /** The phone Recents card supplies only observations. Shell validates the
++     * exact live task and chooses Wonad's last-focused external monitor after
++     * Overview has returned input focus to the phone.
++     */
++    public void sendTaskToWonad(TaskContainer taskContainer) {
++        final TaskKey selected = taskContainer.getTask().key;
++        switchToScreenshot(() -> finishRecentsAnimation(/* toHome= */true, /* shouldPip= */false,
++                () -> {
++                    if (mSystemUiProxy.sendTaskToWonad(selected.id, selected.userId,
++                            selected.lastActiveTime, selected.baseActivity,
++                            selected.token == null ? null : selected.token.asBinder())) {
++                        dismissTaskView(taskContainer.getTaskView(), /*removeTask*/ false);
++                    } else {
++                        Toast.makeText(getContext(), R.string.wonad_transfer_unavailable,
++                                Toast.LENGTH_SHORT).show();
++                    }
++                }));
++    }
++
+ 
+     // Logs when the orientation of Overview changes. We log both real and fake orientation changes.
+diff --git a/quickstep/src/com/android/quickstep/WonadSendShortcut.kt b/quickstep/src/com/android/quickstep/WonadSendShortcut.kt
+new file mode 100644
+--- /dev/null
++++ b/quickstep/src/com/android/quickstep/WonadSendShortcut.kt
+@@ -0,0 +1,51 @@
++package com.android.quickstep
++
++import android.view.Display
++import android.view.View
++import com.android.launcher3.AbstractFloatingViewHelper
++import com.android.launcher3.R
++import com.android.launcher3.popup.SystemShortcut
++import com.android.quickstep.views.RecentsView
++import com.android.quickstep.views.RecentsViewContainer
++import com.android.quickstep.views.TaskContainer
++import javax.inject.Inject
++
++/** Phone Recents offers only a live, single-task Wonad transfer. Shell resolves
++ * the actual task and destination again when the user taps this entry.
++ */
++class WonadSendShortcut private constructor(
++    container: RecentsViewContainer,
++    helper: AbstractFloatingViewHelper,
++    private val taskContainer: TaskContainer,
++) : SystemShortcut<RecentsViewContainer>(
++    R.drawable.ic_external_display,
++    R.string.recent_task_option_send_to_wonad,
++    container,
++    taskContainer.itemInfo,
++    taskContainer.taskView,
++    helper,
++) {
++    override fun onClick(view: View) {
++        dismissTaskMenuView()
++        mTarget.getOverviewPanel<RecentsView<*, *>>().sendTaskToWonad(taskContainer)
++    }
++
++    class Factory @Inject constructor(
++        private val helper: AbstractFloatingViewHelper,
++    ) : TaskShortcutFactory {
++        override fun getShortcuts(
++            container: RecentsViewContainer,
++            taskContainer: TaskContainer,
++        ): List<WonadSendShortcut>? {
++            val key = taskContainer.task.key
++            val validKey = key.displayId == Display.DEFAULT_DISPLAY && key.baseActivity != null &&
++                key.token != null && key.lastActiveTime > 0
++            if (!validKey) return null
++            val allowed = SystemUiProxy.INSTANCE.get(container.asContext())
++                .canSendTaskToWonad(key.id, key.userId, key.lastActiveTime, key.baseActivity,
++                    key.token?.asBinder())
++            if (!allowed) return null
++            return listOf(WonadSendShortcut(container, helper, taskContainer))
++        }
++    }
++}

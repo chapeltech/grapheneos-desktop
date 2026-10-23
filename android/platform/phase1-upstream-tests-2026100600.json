@@ -1,0 +1,236 @@
+{
+  "schema": 1,
+  "kind": "wonad-phase1-upstream-test-plan",
+  "scope": "same-pin-upstream-tests-not-runtime-or-hardware-qualification",
+  "release": "2026100600",
+  "suites": [
+    {
+      "id": "wmtests",
+      "component": "frameworks/base/services/tests/wmtests:WmTests",
+      "format": "atest-json",
+      "minimum_cases": 100,
+      "command_record": "wmtests/command.json",
+      "result_files": [
+        "wmtests/test_result.json"
+      ],
+      "argv": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eo pipefail; source build/envsetup.sh >/dev/null; lunch sdk_phone64_x86_64-cur-userdebug >/dev/null; atest WmTests"
+      ],
+      "cwd": "{source}",
+      "environment": {
+        "ANDROID_BUILD_TOP": "{source}",
+        "ANDROID_SERIAL": "emulator-5580",
+        "BOARD_EMULATOR_DYNAMIC_PARTITIONS_SIZE": "3355443200",
+        "BUILD_DATETIME": "1791386354",
+        "BUILD_HOSTNAME": "r-0123456789abcdef-0123",
+        "BUILD_NUMBER": "wonad.2026100600",
+        "BUILD_USERNAME": "android-user",
+        "DEBIAN_FRONTEND": "noninteractive",
+        "ENABLE_ATEST_LOG_UPLOADING": "0",
+        "HOME": "{out_dir}/phase1-upstream-home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "NINJA_HIGHMEM_NUM_JOBS": "1",
+        "OUT_DIR": "{out_dir}",
+        "PATH": "/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": "{out_dir}/phase1-upstream-tmp",
+        "TZ": "UTC"
+      }
+    },
+    {
+      "id": "systemui",
+      "component": "frameworks/base/packages/SystemUI/tests:SystemUITests",
+      "format": "atest-json",
+      "minimum_cases": 100,
+      "command_record": "systemui/command.json",
+      "result_files": [
+        "systemui/test_result.json"
+      ],
+      "argv": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eo pipefail; source build/envsetup.sh >/dev/null; lunch sdk_phone64_x86_64-cur-userdebug >/dev/null; atest SystemUITests"
+      ],
+      "cwd": "{source}",
+      "environment": {
+        "ANDROID_BUILD_TOP": "{source}",
+        "ANDROID_SERIAL": "emulator-5580",
+        "BOARD_EMULATOR_DYNAMIC_PARTITIONS_SIZE": "3355443200",
+        "BUILD_DATETIME": "1791386354",
+        "BUILD_HOSTNAME": "r-0123456789abcdef-0123",
+        "BUILD_NUMBER": "wonad.2026100600",
+        "BUILD_USERNAME": "android-user",
+        "DEBIAN_FRONTEND": "noninteractive",
+        "ENABLE_ATEST_LOG_UPLOADING": "0",
+        "HOME": "{out_dir}/phase1-upstream-home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "NINJA_HIGHMEM_NUM_JOBS": "1",
+        "OUT_DIR": "{out_dir}",
+        "PATH": "/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": "{out_dir}/phase1-upstream-tmp",
+        "TZ": "UTC"
+      }
+    },
+    {
+      "id": "wm_shell",
+      "component": "frameworks/base/libs/WindowManager/Shell/tests/unittest:WMShellUnitTests",
+      "format": "atest-json",
+      "minimum_cases": 50,
+      "command_record": "wm_shell/command.json",
+      "result_files": [
+        "wm_shell/test_result.json"
+      ],
+      "argv": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eo pipefail; source build/envsetup.sh >/dev/null; lunch sdk_phone64_x86_64-cur-userdebug >/dev/null; atest WMShellUnitTests"
+      ],
+      "cwd": "{source}",
+      "environment": {
+        "ANDROID_BUILD_TOP": "{source}",
+        "ANDROID_SERIAL": "emulator-5580",
+        "BOARD_EMULATOR_DYNAMIC_PARTITIONS_SIZE": "3355443200",
+        "BUILD_DATETIME": "1791386354",
+        "BUILD_HOSTNAME": "r-0123456789abcdef-0123",
+        "BUILD_NUMBER": "wonad.2026100600",
+        "BUILD_USERNAME": "android-user",
+        "DEBIAN_FRONTEND": "noninteractive",
+        "ENABLE_ATEST_LOG_UPLOADING": "0",
+        "HOME": "{out_dir}/phase1-upstream-home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "NINJA_HIGHMEM_NUM_JOBS": "1",
+        "OUT_DIR": "{out_dir}",
+        "PATH": "/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": "{out_dir}/phase1-upstream-tmp",
+        "TZ": "UTC"
+      }
+    },
+    {
+      "id": "input_atms",
+      "component": "WmTests input/ATMS focused modules plus FrameworksInputMethodSystemServerTests",
+      "format": "atest-json",
+      "minimum_cases": 20,
+      "command_record": "input_atms/command.json",
+      "result_files": [
+        "input_atms/test_result.json"
+      ],
+      "argv": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eo pipefail; source build/envsetup.sh >/dev/null; lunch sdk_phone64_x86_64-cur-userdebug >/dev/null; atest WmTests-wm-ActivityRecordInputSinkTests WmTests-wm-ActivityTaskManagerServiceTests WmTests-policy-KeyGestureEventTests FrameworksInputMethodSystemServerTests"
+      ],
+      "cwd": "{source}",
+      "environment": {
+        "ANDROID_BUILD_TOP": "{source}",
+        "ANDROID_SERIAL": "emulator-5580",
+        "BOARD_EMULATOR_DYNAMIC_PARTITIONS_SIZE": "3355443200",
+        "BUILD_DATETIME": "1791386354",
+        "BUILD_HOSTNAME": "r-0123456789abcdef-0123",
+        "BUILD_NUMBER": "wonad.2026100600",
+        "BUILD_USERNAME": "android-user",
+        "DEBIAN_FRONTEND": "noninteractive",
+        "ENABLE_ATEST_LOG_UPLOADING": "0",
+        "HOME": "{out_dir}/phase1-upstream-home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "NINJA_HIGHMEM_NUM_JOBS": "1",
+        "OUT_DIR": "{out_dir}",
+        "PATH": "/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": "{out_dir}/phase1-upstream-tmp",
+        "TZ": "UTC"
+      }
+    },
+    {
+      "id": "grapheneos_secure_paste",
+      "component": "frameworks/base/tests/Input:InputTests:KeyGestureControllerTests (GrapheneOS SecurePaste gos-postsubmit filters)",
+      "format": "atest-json",
+      "minimum_cases": 4,
+      "command_record": "grapheneos_secure_paste/command.json",
+      "result_files": [
+        "grapheneos_secure_paste/test_result.json"
+      ],
+      "argv": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eo pipefail; source build/envsetup.sh >/dev/null; lunch sdk_phone64_x86_64-cur-userdebug >/dev/null; atest InputTests:KeyGestureControllerTests"
+      ],
+      "cwd": "{source}",
+      "environment": {
+        "ANDROID_BUILD_TOP": "{source}",
+        "ANDROID_SERIAL": "emulator-5580",
+        "BOARD_EMULATOR_DYNAMIC_PARTITIONS_SIZE": "3355443200",
+        "BUILD_DATETIME": "1791386354",
+        "BUILD_HOSTNAME": "r-0123456789abcdef-0123",
+        "BUILD_NUMBER": "wonad.2026100600",
+        "BUILD_USERNAME": "android-user",
+        "DEBIAN_FRONTEND": "noninteractive",
+        "ENABLE_ATEST_LOG_UPLOADING": "0",
+        "HOME": "{out_dir}/phase1-upstream-home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "NINJA_HIGHMEM_NUM_JOBS": "1",
+        "OUT_DIR": "{out_dir}",
+        "PATH": "/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": "{out_dir}/phase1-upstream-tmp",
+        "TZ": "UTC"
+      }
+    },
+    {
+      "id": "launcher3_quickstep",
+      "component": "packages/apps/Launcher3:Launcher3Tests+Launcher3QuickStepTests",
+      "format": "atest-json",
+      "minimum_cases": 50,
+      "command_record": "launcher3_quickstep/command.json",
+      "result_files": [
+        "launcher3_quickstep/test_result.json"
+      ],
+      "argv": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eo pipefail; source build/envsetup.sh >/dev/null; lunch sdk_phone64_x86_64-cur-userdebug >/dev/null; atest Launcher3Tests Launcher3QuickStepTests"
+      ],
+      "cwd": "{source}",
+      "environment": {
+        "ANDROID_BUILD_TOP": "{source}",
+        "ANDROID_SERIAL": "emulator-5580",
+        "BOARD_EMULATOR_DYNAMIC_PARTITIONS_SIZE": "3355443200",
+        "BUILD_DATETIME": "1791386354",
+        "BUILD_HOSTNAME": "r-0123456789abcdef-0123",
+        "BUILD_NUMBER": "wonad.2026100600",
+        "BUILD_USERNAME": "android-user",
+        "DEBIAN_FRONTEND": "noninteractive",
+        "ENABLE_ATEST_LOG_UPLOADING": "0",
+        "HOME": "{out_dir}/phase1-upstream-home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "NINJA_HIGHMEM_NUM_JOBS": "1",
+        "OUT_DIR": "{out_dir}",
+        "PATH": "/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": "{out_dir}/phase1-upstream-tmp",
+        "TZ": "UTC"
+      }
+    }
+  ]
+}

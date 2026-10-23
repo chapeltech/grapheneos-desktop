@@ -1,0 +1,8 @@
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -6161,3 +6161,4 @@
+             mFocusedInputTarget = newTarget;
++            WonadFocusBridge.onInputFocusChanged(this, newTarget);
+ 
+             mAccessibilityController.onFocusChanged(lastTarget, newTarget);

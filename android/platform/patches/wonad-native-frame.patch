@@ -1,0 +1,149 @@
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -1263,2 +1263,18 @@
+     int getWonadFocusedDisplayId();
++
++    /** SystemUI-only native-object bridge; never exposed by the APK SDK. */
++    long[] getWonadNativeDisplayState(in int[] displayIds);
++    long[] getWonadNativeTaskState(int userId, long generation, IBinder owner,
++            in IBinder[] taskTokens);
++    boolean setWonadNativeUiLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, IBinder owner);
++    boolean applyWonadNativeFrame(int userId, long generation, IBinder owner,
++            in IBinder[] taskTokens, in int[] expectedUids, in long[] current, in long[] desired);
++    boolean isWonadNativeFrameApplied(int userId, long generation, IBinder owner,
++            in IBinder[] taskTokens, in int[] expectedUids, in long[] current, in long[] desired);
++    boolean operateWonadNativeTask(int userId, long generation, IBinder owner,
++            IBinder taskToken, int expectedUid, boolean close);
++    boolean transferWonadNativeTask(int userId, long generation, IBinder owner,
++            IBinder taskToken, int expectedUid, long destinationDisplayToken);
++    boolean isWonadNativeUiDisplay(int displayId);
+ }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8325,6 +8325,57 @@
+     public int getWonadFocusedDisplayId() {
+         return WonadFocusBridge.focusedDisplay(this);
+     }
++
++    @Override
++    public long[] getWonadNativeDisplayState(int[] displayIds) {
++        return WonadUiBridge.nativeDisplayState(this, displayIds);
++    }
++
++    @Override
++    public long[] getWonadNativeTaskState(int userId, long generation, IBinder owner,
++            IBinder[] taskTokens) {
++        return WonadNativeBridge.taskState(this, userId, generation, owner, taskTokens);
++    }
++
++    @Override
++    public boolean setWonadNativeUiLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, IBinder owner) {
++        return WonadUiBridge.setNativeLease(this, displayId, userId, generation,
++                expiresElapsedRealtime, owner);
++    }
++
++    @Override
++    public boolean applyWonadNativeFrame(int userId, long generation, IBinder owner,
++            IBinder[] taskTokens, int[] expectedUids, long[] current, long[] desired) {
++        return WonadNativeBridge.applyFrame(this, userId, generation, owner,
++                taskTokens, expectedUids, current, desired);
++    }
++
++    @Override
++    public boolean isWonadNativeFrameApplied(int userId, long generation, IBinder owner,
++            IBinder[] taskTokens, int[] expectedUids, long[] current, long[] desired) {
++        return WonadNativeBridge.frameApplied(this, userId, generation, owner,
++                taskTokens, expectedUids, current, desired);
++    }
++
++    @Override
++    public boolean operateWonadNativeTask(int userId, long generation, IBinder owner,
++            IBinder taskToken, int expectedUid, boolean close) {
++        return WonadNativeBridge.operateTask(this, userId, generation, owner,
++                taskToken, expectedUid, close);
++    }
++
++    @Override
++    public boolean transferWonadNativeTask(int userId, long generation, IBinder owner,
++            IBinder taskToken, int expectedUid, long destinationDisplayToken) {
++        return WonadNativeBridge.transferTask(this, userId, generation, owner,
++                taskToken, expectedUid, destinationDisplayToken);
++    }
++
++    @Override
++    public boolean isWonadNativeUiDisplay(int displayId) {
++        return WonadNativeBridge.nativeMode(this, displayId);
++    }
+ 
+     @Override
+     public boolean setWonadFocusLease(int displayId, int userId, long generation,
+diff --git a/services/core/java/com/android/server/wm/TaskFragment.java b/services/core/java/com/android/server/wm/TaskFragment.java
+--- a/services/core/java/com/android/server/wm/TaskFragment.java
++++ b/services/core/java/com/android/server/wm/TaskFragment.java
+@@ -430,3 +430,4 @@
+     static final int FLAG_FORCE_HIDDEN_FOR_WONAD = 1 << 3;
++    static final int FLAG_FORCE_HIDDEN_FOR_WONAD_POLICY = 1 << 4;
+ 
+     @IntDef(prefix = {"FLAG_FORCE_HIDDEN_"}, value = {
+@@ -437,3 +438,4 @@
+             FLAG_FORCE_HIDDEN_FOR_WONAD,
++            FLAG_FORCE_HIDDEN_FOR_WONAD_POLICY,
+     }, flag = true)
+     @interface FlagForceHidden {}
+diff --git a/services/core/java/com/android/server/wm/Task.java b/services/core/java/com/android/server/wm/Task.java
+--- a/services/core/java/com/android/server/wm/Task.java
++++ b/services/core/java/com/android/server/wm/Task.java
+@@ -4707,3 +4707,4 @@
+-        if (flags == FLAG_FORCE_HIDDEN_FOR_WONAD) {
++        if (flags == FLAG_FORCE_HIDDEN_FOR_WONAD
++                || flags == FLAG_FORCE_HIDDEN_FOR_WONAD_POLICY) {
+             return super.setForceHidden(flags, set);
+         }
+diff --git a/services/core/java/com/android/server/wm/TaskDisplayArea.java b/services/core/java/com/android/server/wm/TaskDisplayArea.java
+--- a/services/core/java/com/android/server/wm/TaskDisplayArea.java
++++ b/services/core/java/com/android/server/wm/TaskDisplayArea.java
+@@ -661,4 +661,5 @@
+         for (int i = 0; i < mChildren.size(); i++) {
+             mChildren.get(i).assignChildLayers(t);
+         }
++        WonadNativeBridge.assignShellLayers(this, t);
+     }
+diff --git a/services/core/java/com/android/server/wm/InputMonitor.java b/services/core/java/com/android/server/wm/InputMonitor.java
+--- a/services/core/java/com/android/server/wm/InputMonitor.java
++++ b/services/core/java/com/android/server/wm/InputMonitor.java
+@@ -334,4 +334,5 @@
+             w.getSurfaceTouchableRegion(mTmpRegion, w.mAttrs);
+             inputWindowHandle.setTouchableRegion(mTmpRegion);
+         }
++        WonadNativeBridge.configureInput(mService, w, inputWindowHandle);
+     }
+diff --git a/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java b/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java
+--- a/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java
++++ b/services/core/java/com/android/server/wm/InputWindowHandleWrapper.java
+@@ -137,3 +137,22 @@
++    /** Exact fixed-shell observation, after copying changes to the surface. */
++    boolean hasWonadRegion(Region expected) {
++        return !mChanged && !mHandle.replaceTouchableRegionWithCrop
++                && mHandle.touchableRegion.equals(expected)
++                && (mHandle.inputConfig & InputConfig.NOT_FOCUSABLE) != 0
++                && (mHandle.inputConfig & InputConfig.TRUSTED_OVERLAY) != 0
++                && (mHandle.inputConfig & (InputConfig.SPY | InputConfig.DROP_INPUT)) == 0
++                && ((mHandle.inputConfig & InputConfig.NOT_TOUCHABLE) != 0) == expected.isEmpty();
++    }
++
++    boolean hasWonadObserver(Region expected) {
++        return !mChanged && !mHandle.replaceTouchableRegionWithCrop
++                && mHandle.touchableRegion.equals(expected)
++                && (mHandle.inputConfig & InputConfig.NOT_FOCUSABLE) != 0
++                && (mHandle.inputConfig & InputConfig.TRUSTED_OVERLAY) != 0
++                && (mHandle.inputConfig & InputConfig.SPY) != 0
++                && (mHandle.inputConfig & (InputConfig.NOT_TOUCHABLE | InputConfig.DROP_INPUT)) == 0;
++    }
++
+     void setTouchableRegion(Region region) {
+         if (mHandle.touchableRegion.equals(region)) {
+             return;

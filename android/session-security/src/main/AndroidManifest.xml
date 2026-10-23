@@ -1,0 +1,28 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries><package android:name="org.wonad.desktop" /><package android:name="com.android.systemui" /></queries>
+    <instrumentation android:name="org.wonad.desktop.security.NativeSessionSecurityInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeLockedSessionInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeUserSwitchInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeCompletionTimeoutInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.UpdateDataInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeLauncherPageTimeoutInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeBrokerDispatchInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeFrameConstraintInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeSystemUiDeathInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.security.NativeSignerAuthorizationInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <application android:label="Wonad session security tests" android:allowBackup="false" android:testOnly="true">
+        <!-- Own app UID, NOT the instrumented target's UID. No launcher/permissions. -->
+        <service android:name="org.wonad.desktop.security.NativeAttackService" android:exported="true" />
+        <service android:name="org.wonad.desktop.security.NeutralMalformedCallerService" android:exported="true" />
+    </application>
+</manifest>

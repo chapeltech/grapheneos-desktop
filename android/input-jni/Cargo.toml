@@ -1,0 +1,28 @@
+[package]
+name = "wonad-input-jni"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+license = "LGPL-2.1-or-later"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = []
+pixel10-shortcuts = ["wonad-broker-core/pixel10-shortcuts"]
+
+[dependencies]
+wonad-broker-core = { path = "../broker-rust" }
+jni = { version = "=0.21.1", default-features = false }
+
+[profile.release]
+overflow-checks = true
+panic = "abort"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = "deny"

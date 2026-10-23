@@ -1,0 +1,47 @@
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -1779,2 +1779,6 @@
+     boolean getIgnoreOrientationRequest(int displayId);
++
++    /** SystemUI-only external-task focus lease, independent of shortcut capture. */
++    boolean setWonadFocusLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, in IBinder[] taskTokens, IBinder owner);
+ }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8316,2 +8316,9 @@
+     @Override
++    public boolean setWonadFocusLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, IBinder[] taskTokens, IBinder owner) {
++        return WonadFocusBridge.setLease(this, displayId, userId, generation,
++                expiresElapsedRealtime, taskTokens, owner);
++    }
++
++    @Override
+     public boolean setWonadShortcutLease(int displayId, int userId, long generation,
+diff --git a/services/core/java/com/android/server/wm/Task.java b/services/core/java/com/android/server/wm/Task.java
+--- a/services/core/java/com/android/server/wm/Task.java
++++ b/services/core/java/com/android/server/wm/Task.java
+@@ -1394,2 +1394,4 @@
+     ActivityRecord getTopResumedActivity() {
++        final ActivityRecord wonadFocused = WonadFocusBridge.focusedResumedActivity(this);
++        if (wonadFocused != null) return wonadFocused;
+         if (!isLeafTask()) {
+@@ -2971,6 +2973,7 @@
+         final Task task = child.asTask();
+         if (task != null) {
+             task.updateTaskMovement(toTop, position == POSITION_BOTTOM, position);
+         }
++        WonadFocusBridge.onTaskRaised(this, child, toTop, includingParents);
+     }
+ 
+diff --git a/services/core/java/com/android/server/wm/DisplayContent.java b/services/core/java/com/android/server/wm/DisplayContent.java
+--- a/services/core/java/com/android/server/wm/DisplayContent.java
++++ b/services/core/java/com/android/server/wm/DisplayContent.java
+@@ -925,2 +925,4 @@
++        if (WonadFocusBridge.skipUnfocusedTask(this, w)) return false;
++
+         // IME windows remain visibleRequested while switching apps to maintain a smooth animation.
+         // This persists until the new app is focused, so they can be visibleRequested despite not

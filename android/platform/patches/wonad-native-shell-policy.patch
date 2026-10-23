@@ -1,0 +1,41 @@
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java b/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java
+@@ -651,3 +651,8 @@
+     public void onTaskInfoChanged(RunningTaskInfo taskInfo) {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockPolicy(taskInfo.displayId)) {
++            destroyWindowDecoration(taskInfo);
++            return;
++        }
++
+         final WindowDecorationWrapper decoration = mWindowDecorByTaskId.get(taskInfo.taskId);
+         if (decoration == null) return;
+@@ -1809,3 +1814,4 @@
+     private boolean shouldCreateWindowDecor(RunningTaskInfo taskInfo) {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockPolicy(taskInfo.displayId)) return false;
+         if (DesktopExperienceFlags.ENABLE_WINDOW_DECORATION_REFACTOR.isTrue()
+                 && DesktopExperienceFlags.ENABLE_ADD_WINDOW_DECORATION_TO_ALL_TASKS.isTrue()) {
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java b/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java
+@@ -298,3 +298,4 @@
+     private boolean shouldShowWindowDecor(RunningTaskInfo taskInfo) {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockPolicy(taskInfo.displayId)) return false;
+         if (mDisplayController.getDisplay(taskInfo.displayId) == null) {
+             // If DisplayController doesn't have it tracked, it could be a private/managed display.
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt
+@@ -3873,3 +3873,7 @@
+             return null
+         }
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockPolicy(triggerTask.displayId)) {
++            logV("skipping stock desktop policy: native Wonad attachment")
++            return null
++        }
+         val windowingLayerChange = request.windowingLayerChange
+@@ -6806,3 +6810,4 @@
+     fun onTaskInfoChanged(taskInfo: RunningTaskInfo) {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockPolicy(taskInfo.displayId)) return
+         val repository = userRepositories.getProfile(taskInfo.userId)
+         val inImmersive = repository.isTaskInFullImmersiveState(taskInfo.taskId)

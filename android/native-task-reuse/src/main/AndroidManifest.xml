@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries><package android:name="org.wonad.desktop" /><package android:name="com.android.systemui" /></queries>
+    <instrumentation android:name="org.wonad.desktop.taskreuse.NativeTaskReuseOwnerInstrumentation"
+        android:targetPackage="org.wonad.desktop" android:functionalTest="true" />
+    <instrumentation android:name="org.wonad.desktop.taskreuse.NativeTaskReuseRecyclerInstrumentation"
+        android:targetPackage="org.wonad.desktop.taskreuse" android:functionalTest="true" />
+    <application android:label="Wonad ordinary task recycler" android:allowBackup="false"
+        android:testOnly="true" android:theme="@android:style/Theme.Material.NoActionBar">
+        <activity android:name=".RecyclerActivity" android:exported="true" android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|density|orientation">
+            <intent-filter><action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+    </application>
+</manifest>

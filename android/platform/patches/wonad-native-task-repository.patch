@@ -1,0 +1,69 @@
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt
+@@ -53,3 +53,4 @@
+     override fun onTaskOpening(taskInfo: RunningTaskInfo) {
++        if (excludeNativeWonad(taskInfo)) return
+         val desktopRepository: DesktopRepository =
+             desktopUserRepositories.getProfile(taskInfo.userId)
+@@ -96,3 +97,4 @@
+     override fun onTaskChanging(taskInfo: RunningTaskInfo) {
++        if (excludeNativeWonad(taskInfo)) return
+         val desktopRepository: DesktopRepository =
+             desktopUserRepositories.getProfile(taskInfo.userId)
+@@ -164,3 +166,4 @@
+     override fun onNonTransitionTaskChanging(taskInfo: RunningTaskInfo) {
++        if (excludeNativeWonad(taskInfo)) return
+         // TODO: b/367268953 - Propagate usages from FreeformTaskListener to this method.
+         logD(
+@@ -178,3 +181,4 @@
+     fun onNonTransitionTaskClosing(taskInfo: RunningTaskInfo) {
++        if (excludeNativeWonad(taskInfo)) return
+         logD(
+             "onNonTransitionTaskClosing for taskId=%d, displayId=%d",
+@@ -199,3 +203,4 @@
+     override fun onTaskMovingToFront(taskInfo: RunningTaskInfo) {
++        if (excludeNativeWonad(taskInfo)) return
+         if (!desktopState.isDesktopModeSupportedOnDisplay(taskInfo.displayId)) {
+             logD(
+@@ -247,3 +252,4 @@
+     override fun onTaskMovingToBack(taskInfo: RunningTaskInfo) {
++        if (excludeNativeWonad(taskInfo)) return
+         if (!desktopState.isDesktopModeSupportedOnDisplay(taskInfo.displayId)) {
+             logD(
+@@ -281,3 +287,4 @@
+     override fun onTaskClosing(taskInfo: RunningTaskInfo) {
++        if (excludeNativeWonad(taskInfo)) return
+         if (!desktopState.isDesktopModeSupportedOnDisplay(taskInfo.displayId)) {
+             logD(
+@@ -418,3 +425,30 @@
++    /** Native Wonad roots use ordinary Android task lifecycle but never stock
++     * desk sizing, z order, minimization or persisted desktop bounds. Ownership
++     * stays sticky while parked. Evict a pre-takeover entry as well as refusing
++     * new admission; otherwise resolution/disconnect observers can still apply
++     * a cached stock desktop transaction to this exact ordinary task.
++     */
++    private fun excludeNativeWonad(taskInfo: RunningTaskInfo): Boolean {
++        if (org.wonad.desktop.broker.WonadNativeUi.allowStockPolicy(taskInfo.displayId)) return false
++        val repository = desktopUserRepositories.getProfile(taskInfo.userId)
++        val taskId = taskInfo.taskId
++        if (repository.getDeskIdForTask(taskId) != null || repository.isClosingTask(taskId)) {
++            repository.removeClosingTask(taskId)
++            repository.removeTask(taskId)
++        }
++        // Withdraw only this listener's own previous perceptible mark. Native
++        // WM visibility/resume/OOM handling continues normally; do not change
++        // another subsystem's mark or send a WCT/lifecycle/focus operation.
++        if (perceptibleTasks.remove(taskId)) {
++            try {
++                ActivityTaskManager.getService().setTaskIsPerceptible(taskId, false)
++            } catch (re: RemoteException) {
++                logE("Failed to withdraw stock perceptible task from native Wonad: %s", re)
++            }
++        }
++        return true
++    }
++
+     private fun isDesktopTask(taskInfo: RunningTaskInfo): Boolean =
+         taskInfo.isFreeform && !isTaskPinned(taskInfo)
+ 

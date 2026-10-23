@@ -1,0 +1,13 @@
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -3714,6 +3714,9 @@
+         synchronized (mGlobalLock) {
+             final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+             if (displayContent != null && mRoot.getTopChild() != displayContent) {
++                if (WonadNativeBridge.preventNativeDisplayRaise(this, displayContent)) {
++                    return false;
++                }
+                 // Check whether anything prevents us from moving the display to the top.
+                 if (!displayContent.canStealTopFocus()) {
+                     ProtoLog.i(WM_DEBUG_FOCUS_LIGHT,

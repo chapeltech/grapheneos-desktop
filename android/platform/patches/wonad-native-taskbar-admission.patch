@@ -1,0 +1,125 @@
+diff --git a/quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt b/quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt
+--- a/quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt
++++ b/quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt
+@@ -20,6 +20,7 @@
+ import android.view.View
+ import android.view.WindowManager
+ import android.view.WindowManager.BadTokenException
++import android.view.WindowManager.InvalidDisplayException
+ import android.view.WindowManager.LayoutParams
+ import com.android.launcher3.util.RetryingExecutor
+ 
+@@ -30,15 +31,49 @@
+     private val retryingExecutor: RetryingExecutor = RetryingExecutor(),
+ ) {
+     private var viewAdded = false
++    private var pendingAdd = Any()
+ 
+-    fun addView(params: LayoutParams) {
+-        if (viewAdded) return
++    fun addView(
++        params: LayoutParams,
++        admission: (() -> Boolean)? = null,
++        onRejected: (() -> Unit)? = null,
++    ) {
++        if (viewAdded && admission == null) return
++        val scope = Any().also { pendingAdd = it }
++        fun reject() {
++            if (pendingAdd !== scope) return
++            pendingAdd = Any()
++            retryingExecutor.cancel()
++            onRejected?.invoke()
++        }
++        if (viewAdded) {
++            retryingExecutor.cancel()
++            if (admission?.invoke() == false) reject()
++            return
++        }
+         retryingExecutor.execute { tryCount ->
++            if (pendingAdd !== scope) return@execute true
++            if (admission?.invoke() == false) {
++                reject()
++                return@execute true
++            }
+             try {
+                 windowManager.addView(rootLayout, params)
+                 viewAdded = true
++                if (admission?.invoke() == false) reject()
++                true
++            } catch (e: InvalidDisplayException) {
++                // Only the opt-in external taskbar admission is terminal here.
++                // Retain the ordinary phone/default exception behavior.
++                if (admission == null) throw e
++                reject()
+                 true
+             } catch (e: BadTokenException) {
++                if (pendingAdd !== scope) return@execute true
++                if (admission?.invoke() == false) {
++                    reject()
++                    return@execute true
++                }
+                 Log.d(TAG, "Failed to add window, tryCount=$tryCount", e)
+                 false
+             }
+@@ -46,6 +81,7 @@
+     }
+ 
+     fun removeView() {
++        pendingAdd = Any()
+         retryingExecutor.cancel()
+         if (viewAdded) {
+             windowManager.removeViewImmediate(rootLayout)
+diff --git a/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt b/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt
+--- a/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt
++++ b/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt
+@@ -232,9 +232,34 @@
+ 
+     fun setCurrentTaskbar(activity: TaskbarActivityContext) {
+         removeExistingTaskbar()
++        if (isExternalDisplay && isDestroyed) {
++            activity.onDestroy()
++            return
++        }
+         taskbar = activity
+         if (!isDestroyed) {
+-            viewManager.addView(activity.windowLayoutParams)
++            if (isExternalDisplay) {
++                val wm = windowContext.getSystemService(WindowManager::class.java)
++                viewManager.addView(
++                    activity.windowLayoutParams,
++                    admission = {
++                        !isDestroyed && taskbar === activity && !activity.isDestroyed &&
++                            wm?.shouldShowSystemDecors(displayId) == true
++                    },
++                    onRejected = {
++                        if (taskbar === activity) {
++                            // Clear ownership BEFORE controller callbacks can reenter.
++                            taskbar = null
++                            // Retire the old root BEFORE onDestroy can install a replacement.
++                            viewManager.removeView()
++                            rootLayout.removeAllViews()
++                            activity.onDestroy()
++                        }
++                    },
++                )
++            } else {
++                viewManager.addView(activity.windowLayoutParams)
++            }
+         }
+     }
+ 
+diff --git a/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java b/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
+--- a/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
++++ b/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
+@@ -824,6 +824,11 @@
+             taskbarRootLayout.removeAllViews();
+ 
+             resource.setCurrentTaskbar(taskbar);
++            if (resource.isExternalDisplay() && resource.getTaskbar() != taskbar) {
++                // A synchronous final-admission rejection already destroyed it.
++                taskbar = null;
++                return;
++            }
+             taskbarRootLayout.addView(taskbar.getDragLayer());
+             taskbarRootLayout.setVisibility(getTaskbarVisibility(taskbar.isUserSetupComplete()));
+             taskbar.notifyUpdateLayoutParams();

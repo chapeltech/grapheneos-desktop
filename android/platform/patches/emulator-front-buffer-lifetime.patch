@@ -1,0 +1,82 @@
+--- a/MultiDisplayProvider/jni/com_android_emulator_multidisplay.cpp
++++ b/MultiDisplayProvider/jni/com_android_emulator_multidisplay.cpp
+@@ -32,6 +32,8 @@
+ #include <nativehelper/ScopedLocalRef.h>
+ #include <qemu_pipe_bp.h>
+ #include <sys/epoll.h>
++#include <mutex>
++#include <optional>
+ 
+ 
+ #include "android_runtime/AndroidRuntime.h"
+@@ -45,6 +47,7 @@
+ using namespace android;
+ 
+ static int gFd = 0;
++static std::mutex gPipeWriteMutex;
+ static const uint8_t ADD = 1;
+ static const uint8_t DEL = 2;
+ static const uint8_t QUERY = 3;
+@@ -78,6 +81,8 @@
+ }
+ 
+ struct FrameListener : public ConsumerBase::FrameAvailableListener {
++    std::mutex mFrameMutex;
++    std::optional<BufferItem> mFrontBuffer;
+     sp<BufferItemConsumer> mConsumer;
+     uint32_t mId;
+     uint32_t mCb;
+@@ -97,8 +102,13 @@
+     }
+ 
+     void onFrameAvailable(const BufferItem& item) override {
++        std::lock_guard<std::mutex> frameLock(mFrameMutex);
+         BufferItem bufferItem;
+-        mConsumer->acquireBuffer(&bufferItem, 0);
++        if (mConsumer->acquireBuffer(&bufferItem, 0) != NO_ERROR) return;
++        if (!bufferItem.mGraphicBuffer) {
++            mConsumer->releaseBuffer(bufferItem);
++            return;
++        }
+         ANativeWindowBuffer* b = bufferItem.mGraphicBuffer->getNativeBuffer();
+         if (b && b->handle) {
+             uint32_t cbHandle = extractHostHandle(b->handle);
+@@ -111,8 +121,15 @@
+                     uint32_t data[] = {mId, mCb};
+                     std::vector<uint8_t> buf;
+                     fillMsg(buf, BIND, (uint8_t*)data, sizeof(data));
+-                    qemu_pipe_write_fully(gFd, buf.data(), buf.size());
++                    std::lock_guard<std::mutex> pipeLock(gPipeWriteMutex);
++                    if (qemu_pipe_write_fully(gFd, buf.data(), buf.size()) < 0) {
++                        mConsumer->releaseBuffer(bufferItem);
++                        return;
++                    }
+                 }
++                if (mFrontBuffer) mConsumer->releaseBuffer(*mFrontBuffer);
++                mFrontBuffer = bufferItem;
++                return;
+             } else {
+                 ALOGE("cannot get the host color buffer from native buffer");
+             }
+@@ -123,8 +140,12 @@
+         mConsumer->releaseBuffer(bufferItem);
+     }
+     void setDefaultBufferSize(uint32_t w, uint32_t h) {
++        std::lock_guard<std::mutex> frameLock(mFrameMutex);
+         mConsumer->setDefaultBufferSize(w, h);
+     }
++    ~FrameListener() override {
++        if (mFrontBuffer) mConsumer->releaseBuffer(*mFrontBuffer);
++    }
+     FrameListener(sp<BufferItemConsumer>& consumer, uint32_t id)
+         : mConsumer(consumer), mId(id), mCb(0), mGfxGralloc(
+                 isMinigbmFromProperty() ? gfxstream::createPlatformGralloc()
+@@ -139,7 +160,7 @@
+     ALOGI("create surface for %d", id);
+     // Create surface for this new display
+     auto [bufferItemConsumer, surface] =
+-        BufferItemConsumer::create(GRALLOC_USAGE_HW_RENDER);
++        BufferItemConsumer::create(GRALLOC_USAGE_HW_RENDER, 2);
+     gFrameListener[id] = new FrameListener(bufferItemConsumer, id);
+     gFrameListener[id]->setDefaultBufferSize(width, height);
+     bufferItemConsumer->setFrameAvailableListener(gFrameListener[id]);

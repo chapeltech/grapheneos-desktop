@@ -1,0 +1,16 @@
+diff --git a/services/core/java/com/android/server/wm/ActivityStarter.java b/services/core/java/com/android/server/wm/ActivityStarter.java
+--- a/services/core/java/com/android/server/wm/ActivityStarter.java
++++ b/services/core/java/com/android/server/wm/ActivityStarter.java
+@@ -2867,2 +2867,12 @@
+         mWonadPermissionOnPhone = shouldRouteWonadPermissionToPhone(r, sourceRecord);
++        if (!mWonadPermissionOnPhone && mRequest.originatingPendingIntent != null
++                && sourceRecord != null && !sourceRecord.finishing
++                && sourceRecord.mUserId == r.mUserId
++                && WonadNativeBridge.isManagedPermissionSource(sourceRecord)) {
++            mWonadPermissionOnPhone = com.android.server.am.WonadLocationButtonRouting
++                    .shouldRouteToPhone(mRequest.originatingPendingIntent, r.info, r.intent,
++                            sourceRecord.getUid(), sourceRecord.mUserId, sourceRecord.packageName,
++                            realCallingUid, r.launchedFromUid,
++                            mService.getPackageManagerInternalLocked());
++        }
+         if (mWonadPermissionOnPhone) {

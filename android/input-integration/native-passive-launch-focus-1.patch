@@ -1,0 +1,18 @@
+diff --git a/android/input-integration/src/com/android/server/wm/WonadNativeBridge.kt b/android/input-integration/src/com/android/server/wm/WonadNativeBridge.kt
+--- a/android/input-integration/src/com/android/server/wm/WonadNativeBridge.kt
++++ b/android/input-integration/src/com/android/server/wm/WonadNativeBridge.kt
+@@ -1079,7 +1079,13 @@ object WonadNativeBridge {
+     }
+ 
+     private fun retainedFrameFocus(display: DisplayRow, placements: List<Placement>): ActivityRecord? {
+-        val activity = display.dc.mCurrentFocus?.mActivityRecord ?: return null
++        // A launch can select an Activity before its Window is created. The
++        // last input Window may still be the launcher-close fallback; keeping
++        // it while sorting would overwrite that newer native app selection.
++        // A non-null but withdrawn selection must not resurrect the old Window.
++        // This caller holds the WM lock and has authenticated the exact lease.
++        val activity = display.dc.mFocusedApp
++            ?: display.dc.mCurrentFocus?.mActivityRecord ?: return null
+         val task = activity.task ?: return null
+         return activity.takeIf { activity.isAttached && !activity.finishing &&
+             app(task, display.lease.user) && task.topRunningActivity() === activity &&

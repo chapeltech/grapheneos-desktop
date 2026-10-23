@@ -1,0 +1,24 @@
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -1281,2 +1281,5 @@
+     boolean isWonadNativeUiDisplay(int displayId);
++
++    /** Opaque exact-task namespace across SystemUI death; SystemUI-only. */
++    long getWonadNativeIdentityEpoch();
+ }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8376,6 +8376,11 @@
+     public boolean isWonadNativeUiDisplay(int displayId) {
+         return WonadNativeBridge.nativeMode(this, displayId);
+     }
++
++    @Override
++    public long getWonadNativeIdentityEpoch() {
++        return WonadNativeBridge.identityEpoch(this);
++    }
+ 
+     @Override
+     public boolean setWonadFocusLease(int displayId, int userId, long generation,

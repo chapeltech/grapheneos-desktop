@@ -1,0 +1,207 @@
+package org.wonad.desktop
+import android.os.IBinder
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import org.wonad.desktop.api.DesktopProtocol
+
+__SHELL_RETIREMENT__
+
+private var checks = 0
+private fun yes(value: Boolean) { check(value); checks++ }
+private class BinderDouble : IBinder {
+    override var isBinderAlive = true
+    var recipient: IBinder.DeathRecipient? = null
+    var unlinkFailure: Throwable? = null
+    override fun linkToDeath(recipient: IBinder.DeathRecipient, flags: Int) { this.recipient = recipient }
+    override fun unlinkToDeath(recipient: IBinder.DeathRecipient, flags: Int): Boolean {
+        yes(this.recipient === recipient); unlinkFailure?.let { throw it }; return true
+    }
+    fun die() { isBinderAlive = false; checkNotNull(recipient).binderDied() }
+}
+private class SchedulerDouble(var shutdownFailure: Throwable? = null, var awaitFailure: Throwable? = null) {
+    fun shutdownNow() { shutdownFailure?.let { throw it } }
+    fun awaitTermination(amount: Long, unit: TimeUnit) { awaitFailure?.let { throw it } }
+}
+private class Binding { fun close() {} }
+private class Remote(val binder: BinderDouble, var releaseFailure: Throwable? = null) {
+    fun asBinder(): IBinder = binder
+    fun release(generation: Long) { releaseFailure?.let { throw it } }
+}
+private object ConformanceRegistry { fun displays(generation: Long, displays: List<Any>) {} }
+private data class Display(val shellGeneration: Long)
+private data class Observation(val generation: Long, val identityEpoch: Long,
+    val interactionBlocked: Boolean = false, val displays: List<Display> = listOf(Display(generation)))
+private object RuntimeSnapshot { fun capture(value: Observation) = value.copy() }
+private object ConformanceEvents { data class Revocation(val generation: Long, val reason: Int) }
+private class Events {
+    var onPoll: (() -> ConformanceEvents.Revocation?)? = null
+    val returned = mutableListOf<ConformanceEvents.Revocation>()
+    fun pollRevocation(timeoutMillis: Long = 0): ConformanceEvents.Revocation? {
+        return onPoll?.invoke()?.also { returned.add(it) }
+    }
+    fun pollSnapshot(timeoutMillis: Long): Observation? = null
+}
+private class Ledger {
+    var state = "ready"; var reason: Int? = null
+    val failed = mutableListOf<Throwable>(); val rejections = mutableListOf<String>()
+    var localDeaths = 0
+    fun accepted(nonce: String, phase: String) {}
+    fun rejected(nonce: String, phase: String, error: String) { rejections.add(error) }
+    fun undocked(reason: Int) { this.reason = reason; state = "waiting-reopen" }
+    fun brokerDied() { reason = null; state = "waiting-reopen"; localDeaths++ }
+    fun stopped(nonce: String, phase: String) { state = "stopped" }
+    fun fail(error: Throwable) { failed.add(error); state = "failed" }
+    fun settled() {}
+    fun syncingShells() {}
+}
+__INSTRUCTION__
+
+private class Runner : Runnable {
+    private val malformedProof = java.util.concurrent.atomic.AtomicReference<String?>()
+    private fun malformedObserved(instruction: RuntimeHostInstruction): Unit =
+        error("malformed Binder phase is outside this broker scheduling model")
+    val initialNonce = "d".repeat(32)
+    var now = 10L; var generation = 0L; var identityEpoch = 0L
+    var finished = false; var explicitRelease = false
+    var session: Remote? = null; var events: Events? = null; var snapshot: Observation? = null
+    var remembered: Observation? = null; var plannedRecovery: Observation? = null
+    var recoveryLease: Pair<Long, Long>? = null
+    var binding: Binding? = null; val shellRequested = mutableSetOf<Long>()
+    var waitingForReopen = false; var reopenReason: Int? = null; var reopenAfterBrokerDeath = false
+    val ledger = Ledger(); val instructions = LinkedBlockingQueue<RuntimeHostInstruction>()
+    val expectedRevocation = ConformanceExpectedRevocation { now }
+    val expectedBrokerDeath = ConformanceExpectedBrokerDeath { now }
+    val heartbeatPublication = Any(); var heartbeatOwner: Any? = null
+    var heartbeat: SchedulerDouble? = null
+    var heartbeatError: Throwable? = null
+    var openError: Throwable? = null
+    var schedulerShutdownFailure: Throwable? = null; var schedulerAwaitFailure: Throwable? = null
+    var unlinkFailure: Throwable? = null; var releaseFailure: Throwable? = null
+    var onOpen: ((Runner) -> Unit)? = null
+    var opens = 0
+    fun open(nonce: String, phase: String) {
+        // Explicit local admission/transport doubles, not actual Binder/OS proof.
+        opens++; binding = Binding(); generation = if (opens == 1) 101 else 301
+        identityEpoch = if (opens == 1) 201 else 401
+        session = Remote(BinderDouble().also { it.unlinkFailure = unlinkFailure }, releaseFailure)
+        events = Events(); snapshot = Observation(generation, identityEpoch)
+        expectedBrokerDeath.register(session!!, session!!.asBinder(), generation, identityEpoch)
+        heartbeatOwner = Any(); heartbeat = SchedulerDouble(schedulerShutdownFailure, schedulerAwaitFailure)
+        openError?.let { throw it }
+        waitingForReopen = false; reopenReason = null; reopenAfterBrokerDeath = false
+        onOpen?.invoke(this)
+    }
+    fun currentHeartbeatFailure(): Throwable? = heartbeatError
+    fun isQueuedBacklog(value: Observation) = false
+    fun publish(value: Observation) { snapshot = value }
+    fun showMissingShells(remote: Remote, value: Observation) = true
+    fun expectRevocation(instruction: RuntimeHostInstruction) { error("not a broker-death mode") }
+    fun checkpoint(instruction: RuntimeHostInstruction) {}
+    fun copyObserved(instruction: RuntimeHostInstruction) {}
+    __HEARTBEAT_STOP__
+    __CLOSE__
+    __PRESERVE__
+    __EXPECT__
+    __CONSUME__
+    __REVOKED__
+    __PROCESS__
+    __STOP__
+    __RUN__
+    fun arm() = process(RuntimeHostInstruction("c".repeat(32), "a".repeat(32),
+        ConformanceContract.RUNTIME_EXPECT_BROKER_DEATH, brokerDeath = generation to identityEpoch))
+    fun observe() = consumeBrokerDeath()
+    fun reopen() = process(RuntimeHostInstruction("c".repeat(32), "b".repeat(32), ConformanceContract.RUNTIME_REOPEN))
+    fun queueStop() = instructions.add(RuntimeHostInstruction("c".repeat(32), "e".repeat(32), ConformanceContract.RUNTIME_STOP))
+    fun clear() = yes(session == null && events == null && binding == null && snapshot == null && generation == 0L &&
+        identityEpoch == 0L && heartbeatOwner == null && heartbeat == null && shellRequested.isEmpty())
+}
+
+fun main() {
+    // Actual run catch/finally: primary initial-open error survives TWO cleanup failures.
+    run {
+        val primary = IllegalStateException("original ordinary open failure")
+        val scheduler = IllegalStateException("scheduler cleanup")
+        val unlink = IllegalStateException("unlink cleanup")
+        val r = Runner(); r.openError = primary; r.schedulerAwaitFailure = scheduler; r.unlinkFailure = unlink
+        r.run(); r.clear()
+        yes(r.ledger.failed.single() === primary)
+        yes(primary.suppressed.single() === scheduler); yes(scheduler.suppressed.single() === unlink)
+        yes(r.ledger.state == "failed" && r.ledger.localDeaths == 0)
+    }
+    // Actual run heartbeat-error path: no fabricated death, primary is exact original object.
+    run {
+        val primary = IllegalStateException("original heartbeat transport error")
+        val cleanup = IllegalStateException("retirement error")
+        val r = Runner(); r.heartbeatError = primary; r.schedulerShutdownFailure = cleanup
+        r.onOpen = { it.arm() }
+        r.run(); r.clear()
+        yes(r.ledger.failed.single() === primary); yes(primary.suppressed.single() === cleanup)
+        yes(r.ledger.localDeaths == 0)
+    }
+    // Actual finally-only failure is published, not silently swallowed.
+    run {
+        val cleanup = IllegalStateException("only final cleanup error")
+        val r = Runner(); r.schedulerAwaitFailure = cleanup; r.onOpen = { it.finished = true }
+        r.run(); r.clear(); yes(r.ledger.failed.single() === cleanup); yes(r.ledger.state == "failed")
+    }
+    // Actual REOPEN catch: restore only descriptive data, always publish rejection.
+    run {
+        val r = Runner(); r.open("d".repeat(32), "start"); r.arm()
+        val old = r.session!!; old.binder.die(); yes(r.observe())
+        val saved = r.plannedRecovery
+        val primary = IllegalStateException("ordinary restored prerequisites still absent")
+        val cleanup = IllegalStateException("new partial-owner unlink failed")
+        r.openError = primary; r.unlinkFailure = cleanup
+        r.reopen(); r.clear()
+        yes(primary.suppressed.single() === cleanup)
+        yes(r.ledger.rejections.single().contains(primary.message!!))
+        yes(r.waitingForReopen && r.reopenAfterBrokerDeath && r.reopenReason == null && r.plannedRecovery === saved)
+        yes(r.ledger.failed.isEmpty())
+    }
+    // Exact race from review: death arrives AFTER first consume(false), and the
+    // SDK terminal is dequeued before second consume. No local-only recovery.
+    run {
+        val r = Runner(); var original: ConformanceEvents.Revocation? = null; var oldEvents: Events? = null
+        r.onOpen = {
+            it.arm(); it.queueStop(); val remote = it.session!!; val channel = it.events!!; oldEvents = channel
+            var delivered = false
+            channel.onPoll = {
+                if (delivered) null else {
+                    delivered = true; remote.binder.die()
+                    ConformanceEvents.Revocation(it.generation, DesktopProtocol.REVOKED_LOCKED).also { value -> original = value }
+                }
+            }
+        }
+        r.run(); r.clear()
+        yes(oldEvents!!.returned.single() === original)
+        yes(r.ledger.failed.single().message!!.contains("SDK terminal generation=101 reason=3"))
+        yes(r.ledger.localDeaths == 0 && !r.waitingForReopen && r.plannedRecovery == null)
+        yes(r.expectedBrokerDeath.json() == "null")
+    }
+    // Same race after the heartbeat-error500ms poll, not merely first poll.
+    run {
+        val r = Runner(); var polls = 0
+        r.heartbeatError = IllegalStateException("heartbeat raced callback")
+        r.onOpen = {
+            it.arm(); it.queueStop(); val remote = it.session!!
+            it.events!!.onPoll = {
+                polls++
+                if (polls == 2) { remote.binder.die(); ConformanceEvents.Revocation(it.generation, DesktopProtocol.REVOKED_UNDOCKED) }
+                else null
+            }
+        }
+        r.run(); r.clear(); yes(polls == 2)
+        yes(r.ledger.failed.single().message!!.contains("SDK terminal generation=101 reason=2"))
+        yes(r.ledger.localDeaths == 0 && !r.waitingForReopen)
+    }
+    // Actual STOP release failure must also not be masked by nested cleanup.
+    run {
+        val primary = IllegalStateException("actual release failed")
+        val cleanup = IllegalStateException("stop cleanup failed")
+        val r = Runner(); r.releaseFailure = primary; r.schedulerAwaitFailure = cleanup; r.queueStop()
+        r.run(); r.clear(); yes(r.ledger.failed.single() === primary); yes(primary.suppressed.single() === cleanup)
+        yes(r.ledger.state == "failed")
+    }
+    run { val r = Runner(); r.queueStop(); r.run(); r.clear(); yes(r.ledger.state == "stopped" && r.ledger.failed.isEmpty()) }
+    println("broker-death outer source-body checks=$checks passed")
+}

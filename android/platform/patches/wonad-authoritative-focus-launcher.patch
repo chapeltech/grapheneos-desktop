@@ -1,0 +1,431 @@
+--- a/quickstep/src/com/android/quickstep/SystemUiProxy.kt
++++ b/quickstep/src/com/android/quickstep/SystemUiProxy.kt
+@@ -134,6 +134,14 @@
+     private var splitScreen: ISplitScreen? = null
+     private var oneHanded: IOneHanded? = null
+     private var shellTransitions: IShellTransitions? = null
++    internal class FocusQueryConnection internal constructor(
++        val transitions: IShellTransitions,
++        val binder: IBinder,
++        val epoch: Long,
++    )
++    private var focusQueryEpoch = 0L // MAIN only
++    @Volatile internal var focusQueryConnection: FocusQueryConnection? = null
++        private set
+     private var startingWindow: IStartingWindow? = null
+     private var recentTasks: IRecentTasks? = null
+     private var backAnimation: IBackAnimation? = null
+@@ -318,6 +326,10 @@
+         oneHanded = Stub.asInterface(params.getBinder(IOneHanded.DESCRIPTOR))
+         shellTransitions =
+             IShellTransitions.Stub.asInterface(params.getBinder(IShellTransitions.DESCRIPTOR))
++        focusQueryConnection = if (focusQueryEpoch == Long.MAX_VALUE) null else {
++            focusQueryEpoch++
++            shellTransitions?.let { FocusQueryConnection(it, it.asBinder(), focusQueryEpoch) }
++        }
+         startingWindow =
+             IStartingWindow.Stub.asInterface(params.getBinder(IStartingWindow.DESCRIPTOR))
+         sysuiUnlockAnimationController =
+--- a/quickstep/src/com/android/quickstep/sysuiconnection/TISBinder.kt
++++ b/quickstep/src/com/android/quickstep/sysuiconnection/TISBinder.kt
+@@ -20,6 +20,7 @@
+ import android.graphics.Region
+ import android.os.Bundle
+ import android.os.IRemoteCallback
++import android.os.Looper
+ import android.os.RemoteException
+ import android.util.Log
+ import android.view.Display
+@@ -35,6 +36,7 @@
+ import com.android.launcher3.util.PostUnlockObject
+ import com.android.launcher3.util.ThreadSafeRunnableList
+ import com.android.quickstep.OverviewCommandHelper
++import com.android.quickstep.OverviewCommandHelper.CommandType
+ import com.android.quickstep.OverviewCommandHelper.CommandType.HIDE_ALT_TAB
+ import com.android.quickstep.OverviewCommandHelper.CommandType.SHOW_ALT_TAB
+ import com.android.quickstep.OverviewCommandHelper.CommandType.TOGGLE
+@@ -74,6 +76,19 @@
+     @Named(CONNECTION_CLEANER) private val cleanupTasks: ThreadSafeRunnableList,
+ ) : Stub() {
+     private var state: BindData? = bindData
++    private val focusRouter = AndroidFocusRouter { display ->
++        val current = state
++        current != null && current.lockedUserState.isUserUnlocked &&
++            current.sysUIProxy.focusQueryConnection != null &&
++            current.overviewCommandHelper != null &&
++            current.deviceStateRepository[display]?.let {
++                !it.isScreenPinningActive && it.canStartOverviewCommand()
++            } == true
++    }
++    private val focusConnectionChanged = Runnable {
++        focusRouter.replace(state?.sysUIProxy?.focusQueryConnection)
++    }
++
+ 
+     private inline fun withState(task: BindData.() -> Unit) {
+         state?.apply(task)
+@@ -81,7 +96,14 @@
+ 
+     init {
+         cleanupTasks.addTask(uiExecutor, quickstepKeyGestureEventsHandler::onDestroy)
+-        cleanupTasks.addTask(uiExecutor) { state = null }
++        check(Looper.myLooper() === Looper.getMainLooper())
++        bindData.sysUIProxy.addOnStateChangeListener(focusConnectionChanged)
++        focusConnectionChanged.run()
++        cleanupTasks.addTask(uiExecutor) {
++            bindData.sysUIProxy.removeOnStateChangeListener(focusConnectionChanged)
++            focusRouter.destroy()
++            state = null
++        }
+     }
+ 
+     @BinderThread
+@@ -98,64 +120,41 @@
+     override fun onTaskbarToggled() = withState { taskbarManager.toggleTaskbarStash() }
+ 
+     @BinderThread
+-    override fun onOverviewToggle() = withState {
+-        TestLogging.recordEvent(TestProtocol.SEQUENCE_MAIN, "onOverviewToggle")
+-        val displayId = focusedDisplayIdForOverviewOnConnectedDisplays()
+-        val deviceState = deviceStateRepository[displayId]
+-        if (deviceState?.isScreenPinningActive == true) return
+-
+-        if (deviceState != null && !deviceState.canStartOverviewCommand()) {
+-            Log.d(
+-                TAG,
+-                "onOverviewToggle ignored for display $displayId because the command is blocked",
+-            )
+-            return
+-        }
+-        TaskUtils.closeSystemWindowsAsync(
+-            ActivityManagerWrapper.CLOSE_SYSTEM_WINDOWS_REASON_RECENTS
+-        )
+-        overviewCommandHelper?.addCommand(TOGGLE, displayId)
+-    }
+-
+-    @BinderThread
+-    override fun onOverviewShown(triggeredFromAltTab: Boolean) = withState {
+-        val displayId =
+-            if (triggeredFromAltTab) focusedDisplayIdForAltTabKqsOnConnectedDisplays()
+-            else focusedDisplayIdForOverviewOnConnectedDisplays()
+-
+-        val deviceState = deviceStateRepository[displayId]
+-        if (deviceState != null && !deviceState.canStartOverviewCommand()) {
+-            Log.d(
+-                TAG,
+-                "onOverviewShown ignored for display $displayId because the command is blocked",
+-            )
+-            return
+-        }
+-        if (triggeredFromAltTab) {
+-            TaskUtils.closeSystemWindowsAsync(
+-                ActivityManagerWrapper.CLOSE_SYSTEM_WINDOWS_REASON_RECENTS
+-            )
+-            overviewCommandHelper?.addCommand(SHOW_ALT_TAB, displayId)
+-        } else {
+-            overviewCommandHelper?.addCommand(TOGGLE_WITH_FOCUS, displayId)
+-        }
++    override fun onOverviewToggle() {
++        requestOverview(TOGGLE, closeWindows = true)
++    }
++
++    @BinderThread
++    override fun onOverviewShown(triggeredFromAltTab: Boolean) {
++        requestOverview(if (triggeredFromAltTab) SHOW_ALT_TAB else TOGGLE_WITH_FOCUS,
++            closeWindows = triggeredFromAltTab)
+     }
+ 
+     @BinderThread
+     override fun onOverviewHidden(triggeredFromAltTab: Boolean, triggeredFromHomeKey: Boolean) {
+-        if (!triggeredFromAltTab || triggeredFromHomeKey) return
+-        withState {
+-            // onOverviewShownFromAltTab hides the overview and ends at the target app
+-            val displayId = focusedDisplayIdForAltTabKqsOnConnectedDisplays()
+-            val deviceState = deviceStateRepository[displayId]
+-            if (deviceState != null && !deviceState.canStartOverviewCommand()) {
+-                Log.d(
+-                    TAG,
+-                    "onOverviewHidden ignored for display $displayId because the command is blocked",
+-                )
+-                return
+-            }
+-            overviewCommandHelper?.addCommand(HIDE_ALT_TAB, displayId)
++        if (triggeredFromAltTab && !triggeredFromHomeKey)
++            requestOverview(HIDE_ALT_TAB, closeWindows = false)
++    }
++
++    /** Binder ingress is bounded before MAIN post. All callbacks below run synchronously MAIN. */
++    private fun requestOverview(type: CommandType, closeWindows: Boolean) {
++        focusRouter.submit { display ->
++            val captured = state ?: return@submit
++            val incarnation = captured.sysUIProxy.focusQueryConnection ?: return@submit
++            val helper = captured.overviewCommandHelper ?: return@submit
++            // This guard outlives gate.pending. Queue execution + owned late UI callbacks recheck.
++            val executionGuard = {
++                Looper.myLooper() === Looper.getMainLooper() && state === captured &&
++                    captured.sysUIProxy.focusQueryConnection === incarnation &&
++                    captured.lockedUserState.isUserUnlocked &&
++                    captured.deviceStateRepository[display]?.let {
++                        !it.isScreenPinningActive && it.canStartOverviewCommand()
++                    } == true
++            }
++            if (!executionGuard()) return@submit
++            if (closeWindows) TaskUtils.closeSystemWindowsAsync(
++                ActivityManagerWrapper.CLOSE_SYSTEM_WINDOWS_REASON_RECENTS)
++            helper.addCommand(type, display, executionGuard = executionGuard)
+         }
+     }
+ 
+@@ -352,10 +351,6 @@
+         val overviewComponentObserver: OverviewComponentObserver? by overviewComponentObserver
+         val actionCornerHandler: ActionCornerHandler? by actionCornerHandler
+ 
+-        fun focusedDisplayIdForOverviewOnConnectedDisplays() =
+-            sysUIProxy.focusState.focusedDisplayId
+-
+-        fun focusedDisplayIdForAltTabKqsOnConnectedDisplays() =
+-            sysUIProxy.focusState.focusedDisplayId
++
+     }
+ }
+--- a/quickstep/src/com/android/quickstep/OverviewCommandHelper.kt
++++ b/quickstep/src/com/android/quickstep/OverviewCommandHelper.kt
+@@ -130,6 +130,7 @@
+         type: CommandType,
+         displayId: Int = DEFAULT_DISPLAY,
+         isLastOfBatch: Boolean = true,
++        executionGuard: (() -> Boolean)? = null,
+     ): CommandInfo? {
+         if (commandQueue.size >= MAX_QUEUE_SIZE) {
+             OverviewCommandHelperProtoLogProxy.logCommandQueueFull(type, commandQueue)
+@@ -143,6 +144,7 @@
+                 createTime = elapsedRealtime(),
+                 isLastOfBatch = isLastOfBatch,
+                 statusChangedCallback = this::onCommandStatusChanged,
++                executionGuard = executionGuard,
+             )
+         commandQueue.add(command)
+         OverviewCommandHelperProtoLogProxy.logCommandAdded(command)
+@@ -205,6 +207,11 @@
+                 return@traceSection
+             }
+ 
++            if (!command.isExecutionAllowed()) {
++                commandQueue.remove(command)
++                processNextCommand()
++                return@traceSection
++            }
+             command.status = CommandStatus.PROCESSING
+             OverviewCommandHelperProtoLogProxy.logExecutingCommand(command)
+ 
+@@ -225,6 +232,7 @@
+      */
+     @VisibleForTesting
+     fun executeCommand(command: CommandInfo, onCallbackResult: () -> Unit): Boolean {
++        if (!command.isExecutionAllowed()) return true
+         val recentsView = getVisibleRecentsView(command.displayId)
+         OverviewCommandHelperProtoLogProxy.logExecutingCommand(command, recentsView)
+         return if (recentsView != null) {
+@@ -246,7 +254,8 @@
+                     isCompleted,
+                 )
+                 if (isCompleted) {
+-                    continuation.resume(Unit)
++                    if (!command.hasExecutionGuard() || continuation.isActive)
++                        continuation.resume(Unit)
+                 } else {
+                     OverviewCommandHelperProtoLogProxy.logWaitingForCommandCallback(command)
+                 }
+@@ -296,7 +305,7 @@
+                         getNextToggledTaskView(recentsView, command.displayId),
+                         command,
+                     ) {
+-                        if (runningTaskId != null) {
++                        if (runningTaskId != null && command.isExecutionAllowed()) {
+                             lastToggleInfo[command.displayId] =
+                                 ToggleInfo(command.createTime, runningTaskId)
+                         }
+@@ -610,6 +619,10 @@
+                     targets: RecentsAnimationTargets,
+                     transitionInfo: TransitionInfo?,
+                 ) {
++                    if (!command.isExecutionAllowed()) {
++                        command.removeListener(this)
++                        return
++                    }
+                     OverviewCommandHelperProtoLogProxy.logRecentsAnimStarted(command)
+                     if (gestureEndTarget == GestureEndTarget.RECENTS) {
+                         if (recentsViewContainer is RecentsWindowManager) {
+@@ -625,6 +638,7 @@
+                         logShowOverviewFrom(command)
+                     }
+                     containerInterface.runOnInitBackgroundStateUI {
++                        if (!command.isExecutionAllowed()) return@runOnInitBackgroundStateUI
+                         OverviewCommandHelperProtoLogProxy.logOnInitBackgroundStateUI(command)
+                         interactionHandler.onGestureEnded(
+                             0f,
+@@ -642,6 +656,7 @@
+                     interactionHandler.onGestureCancelled()
+                     command.removeListener(this)
+ 
++                    if (!command.isExecutionAllowed()) return
+                     containerInterface.getCreatedContainer() ?: return
+                     recentsView?.onRecentsAnimationComplete()
+                 }
+@@ -692,6 +707,12 @@
+ 
+     /** Called when the command finishes execution. */
+     private fun onCommandFinished(command: CommandInfo) {
++        if (!command.isExecutionAllowed()) {
++            val wasHead = commandQueue.firstOrNull() === command
++            commandQueue.remove(command)
++            if (wasHead) processNextCommand()
++            return
++        }
+         command.status = CommandStatus.COMPLETED
+         if (commandQueue.firstOrNull() !== command) {
+             OverviewCommandHelperProtoLogProxy.logCommandFinishedButNotScheduled(
+@@ -707,6 +728,12 @@
+     }
+ 
+     private fun cancelCommand(command: CommandInfo, throwable: Throwable?) {
++        if (!command.isExecutionAllowed()) {
++            val wasHead = commandQueue.firstOrNull() === command
++            commandQueue.remove(command)
++            if (wasHead) processNextCommand()
++            return
++        }
+         command.status = CommandStatus.CANCELED
+         OverviewCommandHelperProtoLogProxy.logCommandCanceled(command, throwable)
+         commandQueue.remove(command)
+@@ -714,6 +741,7 @@
+     }
+ 
+     private fun onCommandStatusChanged(command: CommandInfo) {
++        if (!command.isExecutionAllowed()) return
+         when (command.type) {
+             TOGGLE,
+             TOGGLE_OVERVIEW_PREVIOUS,
+@@ -737,6 +765,7 @@
+     }
+ 
+     private fun updateRecentsViewFocus(command: CommandInfo) {
++        if (!command.isExecutionAllowed()) return
+         val recentsView: RecentsView<*, *> = getVisibleRecentsView(command.displayId) ?: return
+         if (
+             command.type != SHOW_ALT_TAB &&
+@@ -754,17 +783,27 @@
+         if (recentsView.isAttachedToWindow) {
+             recentsView.viewRootImpl.touchModeChanged(false)
+         } else {
+-            recentsView.post { recentsView.viewRootImpl.touchModeChanged(false) }
++            recentsView.post {
++                if (command.isExecutionAllowed()) recentsView.viewRootImpl.touchModeChanged(false)
++            }
+         }
+         // Ensure that recents view has focus so that it receives the followup key inputs
+         // Stops requesting focused after first view gets focused.
+-        recentsView.keyboardFocusTaskView.requestFocus() ||
+-            recentsView.nextTaskView.requestFocus() ||
+-            recentsView.firstTaskView.requestFocus() ||
+-            recentsView.requestFocus()
++        if (command.hasExecutionGuard()) {
++            recentsView.keyboardFocusTaskView.requestFocus(command) ||
++                recentsView.nextTaskView.requestFocus(command) ||
++                recentsView.firstTaskView.requestFocus(command) ||
++                recentsView.requestFocus(command)
++        } else {
++            recentsView.keyboardFocusTaskView.requestFocus() ||
++                recentsView.nextTaskView.requestFocus() ||
++                recentsView.firstTaskView.requestFocus() ||
++                recentsView.requestFocus()
++        }
+     }
+ 
+     private fun onRecentsViewFocusUpdated(command: CommandInfo) {
++        if (!command.isExecutionAllowed()) return
+         val recentsView: RecentsView<*, *> = getVisibleRecentsView(command.displayId) ?: return
+         if (command.type == HIDE_ALT_TAB && keyboardFocusTask !is KeyboardFocusTask.Unfocused) {
+             recentsView.currentPage = recentsView.indexOfChild(recentsView.keyboardFocusTaskView)
+@@ -782,7 +821,18 @@
+         return true
+     }
+ 
++    private fun View?.requestFocus(command: CommandInfo): Boolean {
++        if (this == null || !command.isExecutionAllowed()) return false
++        return post {
++            if (command.isExecutionAllowed()) {
++                requestFocus()
++                requestAccessibilityFocus()
++            }
++        }
++    }
++
+     private fun logShowOverviewFrom(command: CommandInfo) {
++        if (!command.isExecutionAllowed()) return
+         val containerInterface = getContainerInterface(command.displayId) ?: return
+         val container = containerInterface.getCreatedContainer() ?: return
+         val event =
+@@ -820,7 +870,12 @@
+         val displayId: Int = DEFAULT_DISPLAY,
+         val isLastOfBatch: Boolean = true,
+         val statusChangedCallback: (CommandInfo) -> Unit,
++        private val executionGuard: (() -> Boolean)? = null,
+     ) {
++        fun hasExecutionGuard(): Boolean = executionGuard != null
++        fun isExecutionAllowed(): Boolean = try { executionGuard?.invoke() ?: true }
++            catch (_: RuntimeException) { false }
++
+ 
+         var status: CommandStatus = CommandStatus.IDLE
+             set(value) {
+--- /dev/null
++++ b/quickstep/src/com/android/quickstep/sysuiconnection/AndroidFocusRouter.kt
+@@ -0,0 +1,47 @@
++package com.android.quickstep.sysuiconnection
++
++import android.os.Bundle
++import android.os.Handler
++import android.os.Looper
++import android.os.RemoteCallback
++import android.os.SystemClock
++import com.android.quickstep.SystemUiProxy
++import org.wonad.focusproposal.v2.FocusActorAdapter
++import org.wonad.focusproposal.v2.FocusMainScheduler
++import org.wonad.focusproposal.v2.ProcessFocusWorker
++
++/** Private Launcher adapter. Never invokes the private Binder query on Launcher MAIN. */
++internal class AndroidFocusRouter(private val eligible: (Int) -> Boolean) {
++    private val handler = Handler(Looper.getMainLooper())
++    private val main = object : FocusMainScheduler {
++        override fun assertMain() { check(Looper.myLooper() === Looper.getMainLooper()) }
++        override fun post(task: Runnable) = handler.post(task)
++        override fun postDelayed(task: Runnable, delayMillis: Long) =
++            handler.postDelayed(task, delayMillis)
++        override fun remove(task: Runnable) = handler.removeCallbacks(task)
++    }
++    private val actor = FocusActorAdapter(main, ProcessFocusWorker,
++        SystemClock::elapsedRealtime, eligible)
++
++    fun replace(connection: SystemUiProxy.FocusQueryConnection?) {
++        main.assertMain()
++        actor.replace(connection?.let { current ->
++            FocusActorAdapter.Connection(current.binder, current.epoch) { token, receive ->
++                // ProcessFocusWorker executes this one-way transact, not MAIN or TaskbarUi.
++                current.transitions.requestFocusedDisplay(token, RemoteCallback { bundle ->
++                    // No Handler supplied to RemoteCallback: claim/post bounds are actor-owned.
++                    receive(exactPayload(bundle))
++                })
++            }
++        })
++    }
++
++    fun submit(route: (Int) -> Unit) = actor.submit(route)
++    fun destroy() = actor.destroy()
++
++    private fun exactPayload(bundle: Bundle?): Map<String, Any?>? = try {
++        if (bundle == null || bundle.keySet() != setOf("request_token", "display_id", "status")) null
++        else mapOf("request_token" to bundle.get("request_token"),
++            "display_id" to bundle.get("display_id"), "status" to bundle.get("status"))
++    } catch (_: RuntimeException) { null }
++}

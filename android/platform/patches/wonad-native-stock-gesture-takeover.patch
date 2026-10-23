@@ -1,0 +1,33 @@
+diff --git a/packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java b/packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java
+--- a/packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java
++++ b/packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java
+@@ -704,8 +704,11 @@
+                 }
+                 removeAndDisposeDisplayResource(displayId);
+                 try {
+-                    mDisplayBackGestureHandlers.put(
+-                            displayId, createDisplayBackGestureHandler(display));
++                    DisplayBackGestureHandler handler = org.wonad.desktop.broker.WonadNativeUi
++                            .createStockGestureHandler(displayId,
++                                    () -> createDisplayBackGestureHandler(display),
++                                    DisplayBackGestureHandler::dispose);
++                    if (handler != null) mDisplayBackGestureHandlers.put(displayId, handler);
+                 } catch (IllegalArgumentException e) {
+                     // This can happen when a display is instantly removed after being added. Note
+                     // that `isDesktopModeSupportedOnDisplay` above just returns `false` if the
+@@ -829,8 +832,13 @@
+                     if (!org.wonad.desktop.broker.WonadNativeUi.allowStockGestures(
+                             display.getDisplayId())) continue;
+ 
+-                    mDisplayBackGestureHandlers.put(display.getDisplayId(),
+-                            createDisplayBackGestureHandler(display));
++                    DisplayBackGestureHandler handler = org.wonad.desktop.broker.WonadNativeUi
++                            .createStockGestureHandler(display.getDisplayId(),
++                                    () -> createDisplayBackGestureHandler(display),
++                                    DisplayBackGestureHandler::dispose);
++                    if (handler != null) {
++                        mDisplayBackGestureHandlers.put(display.getDisplayId(), handler);
++                    }
+                 }
+ 
+                 // Begin listening to changes in blocked activities list

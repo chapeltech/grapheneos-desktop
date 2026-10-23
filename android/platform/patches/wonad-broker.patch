@@ -1,0 +1,187 @@
+diff --git a/libs/WindowManager/Shell/Android.bp b/libs/WindowManager/Shell/Android.bp
+--- a/libs/WindowManager/Shell/Android.bp
++++ b/libs/WindowManager/Shell/Android.bp
+@@ -135,6 +135,7 @@
+ // Extracted defaults to maintain consistency between the compiled target and the lint target.
+ java_defaults {
+     name: "WindowManager-Shell-defaults",
++    srcs: [":wonad-broker-kotlin"],
+     resource_dirs: [
+         "res",
+     ],
+@@ -142,6 +143,7 @@
+     static_libs: [
++        "WonadDesktopSdk",
+         "android.gui.boxshadow-java",
+         "//frameworks/base/libs/WindowManager/Shell/src/com/android/wm/shell/bubbles/user/model:bubbles-user-model",
+         "//frameworks/base/packages/SystemUI/aconfig:com_android_systemui_flags_lib",
+         "//frameworks/libs/systemui:com_android_systemui_shared_flags_lib",
+         "//frameworks/libs/systemui:iconloader_base",
+diff --git a/libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java b/libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java
+--- a/libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java
++++ b/libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java
+@@ -90,8 +90,12 @@
+      */
+     default void init() {
+         getShell().onInit();
++        getWonadController().initialize();
+     }
+ 
++    @WMSingleton
++    org.wonad.desktop.broker.WonadController getWonadController();
++
+     // Interfaces provided to SysUI
+ 
+     @WMSingleton
+diff --git a/packages/SystemUI/Android.bp b/packages/SystemUI/Android.bp
+--- a/packages/SystemUI/Android.bp
++++ b/packages/SystemUI/Android.bp
+@@ -1098,6 +1098,9 @@
+         "SystemUI-application",
++        "WonadBrokerResources",
+     ],
+     resource_dirs: [],
++    jni_libs: ["libwonad_broker_jni"],
++    use_embedded_native_libs: false,
+     enable_ksp: true,
+ 
+     use_resource_processor: true,
+diff --git a/packages/SystemUI/AndroidManifest.xml b/packages/SystemUI/AndroidManifest.xml
+--- a/packages/SystemUI/AndroidManifest.xml
++++ b/packages/SystemUI/AndroidManifest.xml
+@@ -26,5 +26,14 @@
+ 
+     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
++    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
++    <!-- Release a bounded callback worker if the separately signed, sole-package
++         Wonad UID permanently backpressures its one-way Binder receive queue. -->
++    <uses-permission android:name="android.permission.KILL_UID" />
++
++    <!-- Only the independently signed, OS-pinned Wonad APK may open its consent alias. -->
++    <permission android:name="org.wonad.desktop.permission.OPEN_OS_SETTINGS"
++        android:protectionLevel="signature|knownSigner"
++        android:knownCerts="@string/wonad_client_signer_sha256" />
+ 
+     <!-- Used to read wallpaper -->
+     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+@@ -457,6 +466,21 @@
+              up everything else.
+              TODO: Should have an android:permission attribute
+              -->
++        <!-- Each Binder call authenticates the separate Wonad APK's UID and pinned signer. -->
++        <service android:name="org.wonad.desktop.broker.WonadBrokerService"
++            android:exported="true" android:singleUser="true">
++            <intent-filter><action android:name="org.wonad.desktop.BIND" /></intent-filter>
++        </service>
++        <!-- DUMP reaches a runtime-gated debug-shell diagnostics path; ordinary apps cannot start it. -->
++        <activity android:name="org.wonad.desktop.broker.WonadSettingsActivity"
++            android:exported="true" android:permission="android.permission.DUMP"
++            android:excludeFromRecents="true"
++            android:theme="@android:style/Theme.Material.Light.NoActionBar"
++            android:label="Wonad external desktop" />
++        <activity-alias android:name="org.wonad.desktop.broker.WonadClientSettingsActivity"
++            android:targetActivity="org.wonad.desktop.broker.WonadSettingsActivity"
++            android:exported="true"
++            android:permission="org.wonad.desktop.permission.OPEN_OS_SETTINGS" />
+         <service android:name="SystemUIService"
+             android:exported="true"
+         />
+diff --git a/packages/SystemUI/proguard.flags b/packages/SystemUI/proguard.flags
+--- a/packages/SystemUI/proguard.flags
++++ b/packages/SystemUI/proguard.flags
+@@ -1,3 +1,7 @@
+ -include proguard_common.flags
++
++# Private JNI symbol names and the independently maintained APK's Binder ABI.
++-keep class org.wonad.desktop.broker.BrokerNative { *; }
++-keep class org.wonad.desktop.api.** { *; }
+ 
+ -keep class com.android.systemui.SystemUIInitializerImpl {
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+index c0248e560..577c5c336 100644
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -576,6 +576,10 @@ interface IWindowManager
+      */
+     void registerShortcutKey(in long shortcutCode, IShortcutService keySubscriber);
+ 
++    /** SystemUI-only, expiring external-desktop command lease. Not an APK input API. */
++    boolean setWonadShortcutLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, IShortcutService receiver);
++
+     /**
+      * Create an input consumer by name and display id.
+      */
+diff --git a/services/core/Android.bp b/services/core/Android.bp
+index 0edd21b6e..3e6f9564b 100644
+--- a/services/core/Android.bp
++++ b/services/core/Android.bp
+@@ -141,6 +141,7 @@ java_library_static {
+         "ondeviceintelligence_conditionally",
+     ],
+     srcs: [
++        ":wonad-input-kotlin",
+         ":android.hardware.audio.effect-V1-java-source",
+         ":android.hardware.tv.hdmi.connection-V1-java-source",
+         ":android.hardware.tv.hdmi.earc-V1-java-source",
+@@ -181,6 +182,7 @@ java_library_static {
+         "error_prone_annotations",
+         "framework-tethering.stubs.module_lib",
+         "keepanno-annotations",
++        "kotlin-annotations",
+         "monet",
+         "power_hint_flags_lib",
+         "service-art.stubs.system_server",
+@@ -203,6 +205,7 @@ java_library_static {
+     static_libs: [
+         "android.frameworks.vibrator-V1-java", // AIDL
++        "kotlin-stdlib",
+         "android.frameworks.devicestate-V1-java", // AIDL
+         "android.hardware.authsecret-V1.0-java",
+         "android.hardware.authsecret-V1-java",
+         "android.hardware.boot-V1.0-java", // HIDL
+diff --git a/services/Android.bp b/services/Android.bp
+--- a/services/Android.bp
++++ b/services/Android.bp
+@@ -442,6 +442,7 @@ system_java_library {
+ 
+     required: [
+         "AppCompatConfig",
++        "libwonad_input_jni",
+         "libukey2_jni_shared",
+         "submerge_java_shared",
+         "libtrust_token_jni",
+diff --git a/services/core/java/com/android/server/input/KeyGestureController.java b/services/core/java/com/android/server/input/KeyGestureController.java
+index 457ff9071..386351f9d 100644
+--- a/services/core/java/com/android/server/input/KeyGestureController.java
++++ b/services/core/java/com/android/server/input/KeyGestureController.java
+@@ -634,6 +634,11 @@ final class KeyGestureController {
+         }
+ 
+         // Allow focused window to capture key events
++        if (org.wonad.server.input.WonadInputBridge.intercept(
++                mContext, mWindowManagerInternal, event, policyFlags)) {
++            return KEY_INTERCEPT_RESULT_CONSUMED;
++        }
++
+         if (canFocusedWindowCaptureKeys(focus)) {
+             return KEY_INTERCEPT_RESULT_NOT_CONSUMED;
+         }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+index 13fc85386..b8e435744 100644
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8313,6 +8313,13 @@ public class WindowManagerService extends IWindowManager.Stub
+         }
+     }
+ 
++    @Override
++    public boolean setWonadShortcutLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, IShortcutService receiver) {
++        return org.wonad.server.input.WonadInputBridge.setLease(mContext, displayId, userId,
++                generation, expiresElapsedRealtime, receiver);
++    }
++
+     @Override
+     public void registerShortcutKey(long shortcutCode, IShortcutService shortcutKeyReceiver)
+             throws RemoteException {

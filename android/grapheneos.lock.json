@@ -1,0 +1,87 @@
+{
+  "schema": 2,
+  "device": "frankel",
+  "production_target": {
+    "device": "Pixel 10",
+    "product": "frankel",
+    "abi": "arm64-v8a",
+    "variant": "user",
+    "hardware_qualified": false
+  },
+  "development_target": {
+    "product": "sdk_phone64_x86_64",
+    "abi": "x86_64",
+    "avd_profile": "pixel_8",
+    "physical_devices": false
+  },
+  "release": "2026100600",
+  "production_vendor": {
+    "adevtool_commit": "17df3b79a73e67ad68387b35c7d41c85e1d8103c",
+    "device_config": "vendor/adevtool/config/device/frankel.yml",
+    "device_config_sha256": "2521e1a357d029336b4574c2ae9897dc4b9cf2cba729c6a3376bd65f705b79a1",
+    "family_config": "vendor/adevtool/config/device/common/gen10pixel.yml",
+    "family_config_sha256": "92dd7f9cfdb3bdef2922892048f323407b6896f5e93f7ca8f73816488254ceca",
+    "factory_build_id": "CP3A.261005.005",
+    "factory_archive": "frankel-cp3a.261005.005-factory-3721e6ac.zip",
+    "factory_archive_sha256": "3721e6accc2e87d851ee7966d794318078ec74c7cc32343daa10968264d6bb62",
+    "kernel_family": "laguna",
+    "kernel_codename": "muzel"
+  },
+  "repo_tool": {
+    "revision": "refs/tags/v2.68.1",
+    "commit": "e1e215a14ea5373419acb8753b6865de19d1f122"
+  },
+  "builder": {
+    "reference": "wonad-grapheneos-builder:2026100600",
+    "image_digest": "sha256:f719a4a56095b613790ef9afcba2aabda795217ac98e08c24ba5cec65bd4ee33",
+    "platform": "linux/amd64",
+    "dockerfile_sha256": "7c226fa779c83196c3b5303539e6840ce4e21a073beb05bdd5fc8bd18eea21db",
+    "node_version": "v24.21.0",
+    "yarn_version": "1.22.19"
+  },
+  "manifest": {
+    "url": "https://github.com/GrapheneOS/platform_manifest.git",
+    "tag_object": "bff830c5e298027889ec3bfa51ba1e48b23801f4",
+    "commit": "26f7e8a760d4343a501faf09773ec4cc61a6b56b",
+    "default_xml_sha256": "32d30e70ee59d373a17fe8090bdded898afa80651f27c331caca4578b3008888",
+    "default_xml_size": 245577,
+    "signer": "contact@grapheneos.org",
+    "signing_key_fingerprint": "SHA256:AhgHif0mei+9aNyKLfMZBh2yptHdw/aN7Tlh/j2eFwM"
+  },
+  "frameworks_base": {
+    "url": "https://github.com/GrapheneOS/platform_frameworks_base.git",
+    "commit": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3"
+  },
+  "launcher3": {
+    "url": "https://github.com/GrapheneOS/platform_packages_apps_Launcher3.git",
+    "commit": "47accce386f2abdc84e87c05b5587be6e0b0854f"
+  },
+  "updater": {
+    "url": "https://github.com/GrapheneOS/platform_packages_apps_Updater.git",
+    "commit": "52c34a55bd26f7856f9141d7e4237397084d6936",
+    "upstream_url": "https://releases.grapheneos.org/"
+  },
+  "emulator_goldfish": {
+    "url": "https://github.com/GrapheneOS/device_generic_goldfish.git",
+    "commit": "1facfe03b3519c3413a51d2ea56400bbade0b4c3"
+  },
+  "release_pipeline": {
+    "device": "frankel",
+    "lunch_target": "frankel-cur-user",
+    "build_targets": [
+      "vendorbootimage",
+      "vendorkernelbootimage",
+      "target-files-package",
+      "otatools-package"
+    ],
+    "delta_generator": {
+      "path": "script/generate-delta.sh",
+      "project_commit": "09d651841b55e42b9cee7392f0ce29ebda8c8fb5",
+      "sha256": "2e0f80721588ff8f45b298f8242e8af658297c1916ff276b9456c1b4e957ef63",
+      "size": 1026
+    },
+    "source_matched_emulator": "sdk_phone64_x86_64-cur-userdebug",
+    "requires_private_release_keys": true,
+    "requires_distinct_update_server": true
+  }
+}

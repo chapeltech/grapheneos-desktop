@@ -1,0 +1,12 @@
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8316,2 +8316,8 @@
++    <T> T withWonadGlobalLock(java.util.function.Supplier<T> action) {
++        synchronized (mGlobalLock) {
++            return action.get();
++        }
++    }
++
+     @Override
+     public boolean setWonadFocusLease(int displayId, int userId, long generation,

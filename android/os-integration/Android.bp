@@ -1,0 +1,56 @@
+// Staged under external/wonad by stage-os.py. No production signing keys live here.
+package { default_applicable_licenses: ["wonad_license"] }
+license {
+    name: "wonad_license",
+    visibility: [":__subpackages__"],
+    license_kinds: ["SPDX-license-identifier-LGPL-2.1"],
+    license_text: ["LICENSE"],
+}
+rust_library_rlib {
+    name: "libwonad_broker_core",
+    crate_name: "wonad_broker_core",
+    features: [], // Replaced only by stage-os.py's explicit product profile.
+    srcs: ["broker-rust/src/lib.rs"],
+    edition: "2021",
+    no_stdlibs: true,
+    stdlibs: ["libcompiler_builtins.rust_sysroot", "libcore.rust_sysroot"],
+}
+rust_ffi_shared {
+    name: "libwonad_broker_jni",
+    crate_name: "wonad_broker_jni",
+    srcs: ["broker-jni/src/lib.rs"],
+    edition: "2021",
+    rustlibs: ["libjni", "libwonad_broker_core"],
+    compile_multilib: "first",
+    system_ext_specific: true,
+}
+rust_ffi_shared {
+    name: "libwonad_input_jni",
+    crate_name: "wonad_input_jni",
+    srcs: ["input-jni/src/lib.rs"],
+    edition: "2021",
+    rustlibs: ["libjni", "libwonad_broker_core"],
+    compile_multilib: "first",
+}
+java_library {
+    name: "WonadDesktopSdk",
+    srcs: ["desktop-sdk/src/main/aidl/**/*.aidl", "desktop-sdk/src/main/kotlin/**/*.kt"],
+    aidl: { local_include_dirs: ["desktop-sdk/src/main/aidl"] },
+}
+android_library {
+    name: "WonadBrokerResources",
+    manifest: "os-integration/resources/AndroidManifest.xml",
+    resource_dirs: ["generated-res"],
+    use_resource_processor: true,
+    min_sdk_version: "current",
+    platform_apis: true,
+    system_ext_specific: true,
+}
+filegroup {
+    name: "wonad-broker-kotlin",
+    srcs: ["broker-core/src/main/kotlin/**/*.kt", "os-integration/src/**/*.kt", "WonadSigning.kt"],
+}
+filegroup {
+    name: "wonad-input-kotlin",
+    srcs: ["input-core/src/main/kotlin/**/*.kt", "input-integration/src/**/*.kt"],
+}

@@ -1,0 +1,10 @@
+/forks/
+/projects/
+/build/
+/artifacts/
+target/
+build/
+.gradle/
+.kotlin/
+__pycache__/
+*.pyc

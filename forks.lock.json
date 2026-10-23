@@ -1,0 +1,4065 @@
+{
+  "schema": 1,
+  "source_authority": "Git fork commits; historical patches are provenance only",
+  "projects": {
+    "frameworks/base": {
+      "repository": "forks/frameworks-base.git",
+      "upstream": "https://github.com/GrapheneOS/platform_frameworks_base",
+      "active": {
+        "emulator": {
+          "branch": "desktop/source-stack",
+          "commit": "bb772f9c0929faa3024575d1f65ec0c37c970377"
+        },
+        "pixel10": {
+          "branch": "desktop/source-stack",
+          "commit": "bb772f9c0929faa3024575d1f65ec0c37c970377"
+        }
+      },
+      "snapshots": [
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/wonad-grapheneos-2026100600",
+          "commit": "6de664d2a1d074a4ecbd6a2ebab9f90047598fe9",
+          "tree": "ee02f0be7fb9f96722f897c64f642cb056c522e1",
+          "changes": []
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-frankel-baseline-1/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/frankel-baseline-1",
+          "commit": "52917c5edd51b3e28c377d5a5bb4fc5cae7e9c0c",
+          "tree": "ee02f0be7fb9f96722f897c64f642cb056c522e1",
+          "changes": []
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-frankel-development-20261020-1/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/frankel-development-20261020-1",
+          "commit": "f61567564f9143c38cec8c37ea1f39aa2da82674",
+          "tree": "4789f63c55fe1a00309e459e7a96173dcb48d976",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/com/android/wm/shell/shared/IShellTransitions.aidl",
+              "mode": "100644",
+              "blob": "191f365780842465eb77482390ffdae3d569f560"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/FocusCommandGate.kt",
+              "mode": "100644",
+              "blob": "e97744f0e41b56122499aafda370b86ca0d4dfe7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusActorAdapter.kt",
+              "mode": "100644",
+              "blob": "31b05c184358fd78b8a70116d018abc1f5df907a"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusQueryCoordinator2.kt",
+              "mode": "100644",
+              "blob": "3f6a6bf1f08760743fe7c72288f6f161d2ca7305"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/OwnedFocusWorker.kt",
+              "mode": "100644",
+              "blob": "5b7b793f04ffc46a6f932c1f572a7141ac21cec5"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/ShellFocusQueries.kt",
+              "mode": "100644",
+              "blob": "f6a5dc9df0b936488171c2c13bfcbc5cdebce765"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/Transitions.java",
+              "mode": "100644",
+              "blob": "b6560779ac5ed4b8dcd3af2b33e266bbeb72c798"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "babbd6f68e6a71091f218ad4dea9e3ee37c2c235"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-10/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-10",
+          "commit": "5b2b64186a756e6abf339b4721f3142abb51cb7b",
+          "tree": "ada1d7480a40c33ceda940f9a14a7568a5d1575f",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/com/android/wm/shell/shared/IShellTransitions.aidl",
+              "mode": "100644",
+              "blob": "191f365780842465eb77482390ffdae3d569f560"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/FocusCommandGate.kt",
+              "mode": "100644",
+              "blob": "e97744f0e41b56122499aafda370b86ca0d4dfe7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusActorAdapter.kt",
+              "mode": "100644",
+              "blob": "31b05c184358fd78b8a70116d018abc1f5df907a"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusQueryCoordinator2.kt",
+              "mode": "100644",
+              "blob": "3f6a6bf1f08760743fe7c72288f6f161d2ca7305"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/OwnedFocusWorker.kt",
+              "mode": "100644",
+              "blob": "5b7b793f04ffc46a6f932c1f572a7141ac21cec5"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/ShellFocusQueries.kt",
+              "mode": "100644",
+              "blob": "6fa50b5a9b9ff30a06661bcafeb462f265b8bb00"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/Transitions.java",
+              "mode": "100644",
+              "blob": "b6560779ac5ed4b8dcd3af2b33e266bbeb72c798"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "babbd6f68e6a71091f218ad4dea9e3ee37c2c235"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-11/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-11",
+          "commit": "c6f4e85352405de64e820c7fd884eb0965d2bf48",
+          "tree": "4789f63c55fe1a00309e459e7a96173dcb48d976",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/com/android/wm/shell/shared/IShellTransitions.aidl",
+              "mode": "100644",
+              "blob": "191f365780842465eb77482390ffdae3d569f560"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/FocusCommandGate.kt",
+              "mode": "100644",
+              "blob": "e97744f0e41b56122499aafda370b86ca0d4dfe7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusActorAdapter.kt",
+              "mode": "100644",
+              "blob": "31b05c184358fd78b8a70116d018abc1f5df907a"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusQueryCoordinator2.kt",
+              "mode": "100644",
+              "blob": "3f6a6bf1f08760743fe7c72288f6f161d2ca7305"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/OwnedFocusWorker.kt",
+              "mode": "100644",
+              "blob": "5b7b793f04ffc46a6f932c1f572a7141ac21cec5"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/ShellFocusQueries.kt",
+              "mode": "100644",
+              "blob": "f6a5dc9df0b936488171c2c13bfcbc5cdebce765"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/Transitions.java",
+              "mode": "100644",
+              "blob": "b6560779ac5ed4b8dcd3af2b33e266bbeb72c798"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "babbd6f68e6a71091f218ad4dea9e3ee37c2c235"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-3/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-3",
+          "commit": "0c051f8e52d165a8a12efde6884f8600b01a25bb",
+          "tree": "60711e8319cc6e5671407485ee7df8e8bb73c895",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "834c67fe62dfcdeb666945028420880f4b7d85c3"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-4/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-4",
+          "commit": "d56a42afc4cf36d2f34af64e1bb779557e3ac4bb",
+          "tree": "60711e8319cc6e5671407485ee7df8e8bb73c895",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "834c67fe62dfcdeb666945028420880f4b7d85c3"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-5/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-5",
+          "commit": "12ed6f00c529743d92e4240675d23fb2e19c7346",
+          "tree": "60711e8319cc6e5671407485ee7df8e8bb73c895",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "834c67fe62dfcdeb666945028420880f4b7d85c3"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-6/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-6",
+          "commit": "272fcb5d539a0bfd5db0a8c9ae63356762c5145e",
+          "tree": "e6b6cb014aecf481659b66d4776c2cc18c6e2231",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "babbd6f68e6a71091f218ad4dea9e3ee37c2c235"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-7/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-7",
+          "commit": "7ddb6942326065f1b9551e66fc9699e2701c21d5",
+          "tree": "e6b6cb014aecf481659b66d4776c2cc18c6e2231",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "babbd6f68e6a71091f218ad4dea9e3ee37c2c235"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-8/frameworks/base",
+          "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+          "branch": "archive/phase1-custom-8",
+          "commit": "89b2b62b12bb9b5305cc2f480f8538916379a7f0",
+          "tree": "ada1d7480a40c33ceda940f9a14a7568a5d1575f",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "295b21fb1b28bb7d4d1bf79ef2b2a9c67627f248"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/com/android/wm/shell/shared/IShellTransitions.aidl",
+              "mode": "100644",
+              "blob": "191f365780842465eb77482390ffdae3d569f560"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/FocusCommandGate.kt",
+              "mode": "100644",
+              "blob": "e97744f0e41b56122499aafda370b86ca0d4dfe7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusActorAdapter.kt",
+              "mode": "100644",
+              "blob": "31b05c184358fd78b8a70116d018abc1f5df907a"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/FocusQueryCoordinator2.kt",
+              "mode": "100644",
+              "blob": "3f6a6bf1f08760743fe7c72288f6f161d2ca7305"
+            },
+            {
+              "path": "libs/WindowManager/Shell/shared/src/org/wonad/focusproposal/v2/OwnedFocusWorker.kt",
+              "mode": "100644",
+              "blob": "5b7b793f04ffc46a6f932c1f572a7141ac21cec5"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "03a6060e9cc1011103f762d3bed2b4e4fb6d9189"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "2c727ad51e284678fd90350bed27074651a50100"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "ba8fea2d93c424609f4bb8b4a45cc1f43ca22514"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/ShellFocusQueries.kt",
+              "mode": "100644",
+              "blob": "6fa50b5a9b9ff30a06661bcafeb462f265b8bb00"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/transition/Transitions.java",
+              "mode": "100644",
+              "blob": "b6560779ac5ed4b8dcd3af2b33e266bbeb72c798"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "b4a55dfdec1940073ff8c06c8a910117b7684546"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "0d5fd76391773a909d004224424adfda06783581"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "babbd6f68e6a71091f218ad4dea9e3ee37c2c235"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "a9b5baf9547fb362358c7b6f6f19a0218cc5b879"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-build/frameworks/base",
+          "upstream_base": "de1d1d2506ef37bdd994a13a40b579edd4cbc9c6",
+          "branch": "archive/wonad-grapheneos-build",
+          "commit": "1f7c3a277c345b8be06a8606e2a6cc9f0090b53d",
+          "tree": "bc8661442598bf6ef4a6c37ddb3bb9b80cfca9ee",
+          "changes": [
+            {
+              "path": "core/java/android/view/IWindowManager.aidl",
+              "mode": "100644",
+              "blob": "8e600d3a7ce8ed55c47e382751ce4ec3490fa7ff"
+            },
+            {
+              "path": "libs/WindowManager/Shell/Android.bp",
+              "mode": "100644",
+              "blob": "2c469d0163336e9261fb222a2540c67789db0b26"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/dagger/WMComponent.java",
+              "mode": "100644",
+              "blob": "4039e8b40f90faa53ba0215fa52a1b28666d5b51"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopDisplayEventHandler.kt",
+              "mode": "100644",
+              "blob": "ec2425ea8a4228d92ac74e6bc2b0a22eb70f3dbb"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTaskChangeListener.kt",
+              "mode": "100644",
+              "blob": "5bb09547aed36a97fcefa9963493daa35f4cf286"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/DesktopTasksController.kt",
+              "mode": "100644",
+              "blob": "d927c2019e45bcad12c34ad6edcf2e429b579ab7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionHandler.kt",
+              "mode": "100644",
+              "blob": "6f136d42b74f89f615493058dfaf9976a7349067"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/FreeformFallbackTransitionObserver.kt",
+              "mode": "100644",
+              "blob": "701414b3baf11126007ddae57c9dfc08c0d7deec"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/api/IDesktopMode.aidl",
+              "mode": "100644",
+              "blob": "118c7082d7c2d934885bb4647563051b06513976"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/desktopwallpaperactivity/DesktopWallpaperActivityUtils.kt",
+              "mode": "100644",
+              "blob": "c971114ebde4803976904c771b7bdfecaa1fe6f7"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksController.kt",
+              "mode": "100644",
+              "blob": "fba732a1d4a593ceff3a92d0924e84db7a11a381"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/DesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "fe7600a9b988e3db9c581ceff03560cda73d25ed"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/desktopmode/multidesks/RootTaskDesksOrganizer.kt",
+              "mode": "100644",
+              "blob": "a4a42ee55c7daca44210eb158cb93527b7fe2437"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/CaptionWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "23285c303b935b3dd335aa21db42ac5db24e5cc1"
+            },
+            {
+              "path": "libs/WindowManager/Shell/src/com/android/wm/shell/windowdecor/DesktopModeWindowDecorViewModel.java",
+              "mode": "100644",
+              "blob": "2f81a74c9944406c051680a5bfd54db3bf10b1dc"
+            },
+            {
+              "path": "libs/WindowManager/Shell/tests/unittest/src/com/android/wm/shell/desktopmode/DesktopTasksControllerTest.kt",
+              "mode": "100644",
+              "blob": "3c22e2ce3ce2252d7fd685e130111cdc345f3245"
+            },
+            {
+              "path": "packages/SystemUI/Android.bp",
+              "mode": "100644",
+              "blob": "32e5680f83c1a6e1a3b79fc3410afa6c905f3fd1"
+            },
+            {
+              "path": "packages/SystemUI/AndroidManifest.xml",
+              "mode": "100644",
+              "blob": "084fd669e7a0daa6f651dfe9863cd0cc1846336f"
+            },
+            {
+              "path": "packages/SystemUI/proguard.flags",
+              "mode": "100644",
+              "blob": "175c35f306f58bd479572ce7bac091ef2b969e7f"
+            },
+            {
+              "path": "packages/SystemUI/shared/src/com/android/systemui/shared/recents/model/Task.java",
+              "mode": "100644",
+              "blob": "5371f61e84d051495c7a1eb8591dab38e21f9e8c"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/DisplayModule.kt",
+              "mode": "100644",
+              "blob": "e4c33ba1c620da1a5843f93453ca8863027adc1d"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt",
+              "mode": "100644",
+              "blob": "ed3e5861b6614de5f3bc2641bea5febd2ea8a30f"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/display/data/repository/WonadDecorationsRepository.kt",
+              "mode": "100644",
+              "blob": "72dd94bea5ec8736bc5fe56220f5bb9b1d375052"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/NavigationBarControllerImpl.java",
+              "mode": "100644",
+              "blob": "db36f35b0906b3b0de69d74b40d327484d4a809a"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/gestural/EdgeBackGestureHandler.java",
+              "mode": "100644",
+              "blob": "93f030b37afb25f16d032386384d4f6c6b0fc988"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/navigationbar/views/NavigationBar.java",
+              "mode": "100644",
+              "blob": "97e76161681b0e30b2185df9c649f3ad87b43b1e"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt",
+              "mode": "100644",
+              "blob": "d88bd14f73f20c3f0a8e1b79e54e8ef6b9e251ac"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/core/StatusBarOrchestrator.kt",
+              "mode": "100644",
+              "blob": "e1ab6c9351a43db5a79eb205f3e5fd2082ad4489"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/events/PrivacyDotWindowController.kt",
+              "mode": "100644",
+              "blob": "284a6b617c910cedf56310524e53fa32f4a9f056"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerImpl.java",
+              "mode": "100644",
+              "blob": "283ba0a07514bbc750522e01447f7d58f7ce0fcb"
+            },
+            {
+              "path": "packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt",
+              "mode": "100644",
+              "blob": "df842a9deffa1acd48bacb0666570a81f5a9b06d"
+            },
+            {
+              "path": "services/Android.bp",
+              "mode": "100644",
+              "blob": "19aa7fa313bc45f4552e994656afc1a134945210"
+            },
+            {
+              "path": "services/core/Android.bp",
+              "mode": "100644",
+              "blob": "9e89d072ec635f9ba46c819824bc4ab169ba6503"
+            },
+            {
+              "path": "services/core/java/com/android/server/input/KeyGestureController.java",
+              "mode": "100644",
+              "blob": "834c67fe62dfcdeb666945028420880f4b7d85c3"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecord.java",
+              "mode": "100644",
+              "blob": "b8973b157466b4c662afaac08e3974097332e5a4"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityRecordInputSink.java",
+              "mode": "100644",
+              "blob": "39a3cbe6303eca667587cf6ee63d3ac9bacfbc7d"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityStarter.java",
+              "mode": "100644",
+              "blob": "fa0e2e932ad3aed3dd19cf2a4f719a1e118c362f"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/ActivityTaskSupervisor.java",
+              "mode": "100644",
+              "blob": "67d544e2ba9366fc272be733bc565aded62c68bf"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayContent.java",
+              "mode": "100644",
+              "blob": "6d555bb81aaeca5ba87f74cbc2e731fa8391d1a8"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/DisplayWindowSettings.java",
+              "mode": "100644",
+              "blob": "05fd48b06427bf43729831039fb5dc271eb74de5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputMonitor.java",
+              "mode": "100644",
+              "blob": "597a98692cfd6a623415ed466eaf6c25734a67c7"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/InputWindowHandleWrapper.java",
+              "mode": "100644",
+              "blob": "dfd21fe2e65878d48fa638532f127be1b5cc8510"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/LaunchParamsUtil.java",
+              "mode": "100644",
+              "blob": "7351e6c3c7bd001d50cdbea549cf67220fd6d357"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/RootWindowContainer.java",
+              "mode": "100644",
+              "blob": "4b62370458609a08d588a7560db54f50de603dba"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/Task.java",
+              "mode": "100644",
+              "blob": "728c8aa8650b060101955a5de227b1bb6d9a2945"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskDisplayArea.java",
+              "mode": "100644",
+              "blob": "4db23a83b585e6e34140c68b9dd04237d2383ba5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragment.java",
+              "mode": "100644",
+              "blob": "6c4ee66e4791a5999fe0cd7b1a668a1144a8fae5"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskFragmentOrganizerController.java",
+              "mode": "100644",
+              "blob": "3b3524cdfa8bad5e93da1db4f1f019dfc1808baa"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/TaskOrganizerController.java",
+              "mode": "100644",
+              "blob": "69134f76c7474fd96466c58971adc9d6d20e8314"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainer.java",
+              "mode": "100644",
+              "blob": "81336383027fedc12cbba22293c92c583a07087a"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowContainerVisibilityHelperImpl.java",
+              "mode": "100644",
+              "blob": "435f381ba61c75fe7e62d02223a0d95b697e43c1"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowManagerService.java",
+              "mode": "100644",
+              "blob": "04b75918f352dfc00fd70abd4051c83861fd31d0"
+            },
+            {
+              "path": "services/core/java/com/android/server/wm/WindowOrganizerController.java",
+              "mode": "100644",
+              "blob": "a1ab9aff8d9970494ff2252daa6041509eac79f6"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/DisplayWindowSettingsTests.java",
+              "mode": "100644",
+              "blob": "ea54aaa249c1d3341d95d82d8c5a09421702ed1d"
+            },
+            {
+              "path": "services/tests/wmtests/src/com/android/server/wm/WonadFocusedDisplayTests.kt",
+              "mode": "100644",
+              "blob": "9ed8a024c168d0708253e812707641152dbfd47d"
+            }
+          ]
+        }
+      ],
+      "previous_active": {
+        "emulator": {
+          "branch": "desktop/emulator",
+          "commit": "c6f4e85352405de64e820c7fd884eb0965d2bf48"
+        },
+        "pixel10": {
+          "branch": "desktop/pixel10",
+          "commit": "f61567564f9143c38cec8c37ea1f39aa2da82674"
+        }
+      },
+      "current_declared_inputs": {
+        "commit": "bb772f9c0929faa3024575d1f65ec0c37c970377",
+        "tree": "269364f3c6317289916f97b695c05f9fa96ff3e9",
+        "upstream_base": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+        "patches": [
+          {
+            "name": "wonad-broker.patch",
+            "sha256": "5b0010b8c96a0006ccd9c25c103c3dd5b79b8c1a06ff263f7bc73fa28ec59e6c"
+          },
+          {
+            "name": "wonad-focus.patch",
+            "sha256": "39c036aa98cb173760d132d9685e14efa6220598702f0280a873b9ba4e6c5635"
+          },
+          {
+            "name": "wonad-focus-lock.patch",
+            "sha256": "2b94e9cd1ad737104442174433430a8b8a2c016569fbf26183c5ebf0b7349f1d"
+          },
+          {
+            "name": "wonad-focus-order.patch",
+            "sha256": "1d769cb2f8731a46e0b78eb2bdc3572b6882ed1854f022e552586b3736327d6f"
+          },
+          {
+            "name": "wonad-focus-lifecycle.patch",
+            "sha256": "1f1a1c983fad17a9b9bed4367c00e03028dc477f5f1c89ebcf1f133a2f7a1d50"
+          },
+          {
+            "name": "wonad-organizer-death.patch",
+            "sha256": "aa2bee145e730f14554a3adcbeeba0c0f71ddb82a9e888792473275058a543dd"
+          },
+          {
+            "name": "wonad-display-settings-lifetime.patch",
+            "sha256": "9b83810928d05260bf4f88600deddbb61c31589f89025b77ad112a0e0bad2590"
+          },
+          {
+            "name": "wonad-focused-display.patch",
+            "sha256": "65c039fc0406803afa9d7d606a853f90385a08222831b3bde2974c80bca8d14b"
+          },
+          {
+            "name": "wonad-focused-display-tests.patch",
+            "sha256": "86127ee8f050bc9f6ae41b9f3f8430500988ee4c01066b3fdaa808af9634b0e5"
+          },
+          {
+            "name": "wonad-recents-framework.patch",
+            "sha256": "728dbdb0cd17eaa071b51564b1cad996c7ea4dfbaa90f2019b69b20eb35202f3"
+          },
+          {
+            "name": "wonad-recents-taskkey.patch",
+            "sha256": "835bf3ae8891f18f4e5f9b72a6288cf1480b1d11c47781e88894fd521793d7cc"
+          },
+          {
+            "name": "wonad-external-ui.patch",
+            "sha256": "4cfe203c50f43dd2b724b1796f44c6c39aa0d81b4e4bd0a4e8ef40aa5ce5eb0e"
+          },
+          {
+            "name": "wonad-external-ui-lifecycle.patch",
+            "sha256": "c3a837e4a41f7987991f3c296138d9887e8713ebda33895b36b1a96593000d33"
+          },
+          {
+            "name": "wonad-external-wallpaper.patch",
+            "sha256": "480310fc4195ee7404e0aea52d9f672abef35d21ba8965c28d105cebb6a915bf"
+          },
+          {
+            "name": "wonad-external-ui-visibility.patch",
+            "sha256": "75a69814abcc7bb0d7e3b99a9d21a55db2137e566b7430bd6575f5a23c167875"
+          },
+          {
+            "name": "wonad-native-frame.patch",
+            "sha256": "509c9fd73e0581cb894fe6e5d8fb4b4ec2cc2a7fca08c64ae82db23150116098"
+          },
+          {
+            "name": "wonad-native-shell-policy.patch",
+            "sha256": "48be298d77c8296cb9bb420e2841f114307792b6466334252fd0e917e587a41b"
+          },
+          {
+            "name": "wonad-native-task-repository.patch",
+            "sha256": "bfd764b2fd26affc532cb4a17a091f26485297db746f676a0086f548d34d0a35"
+          },
+          {
+            "name": "wonad-native-recovery.patch",
+            "sha256": "4a2f42dcfd1c7dd1328b220bc553d9c34aa1891ae4075dcf7a426cf590e8d5dd"
+          },
+          {
+            "name": "wonad-native-input-completion.patch",
+            "sha256": "4c303706e6bba2f4094e3e356c0165e18aacab141efa8f0a6146843ddec2c35b"
+          },
+          {
+            "name": "wonad-native-task-bounds.patch",
+            "sha256": "a202b52443f6f0769395e66fbff8d4532a904bb09fa8ab1a7b64f26a04e7caef"
+          },
+          {
+            "name": "wonad-native-protected-ui.patch",
+            "sha256": "ecff4ca6aa7194236591ebcf444a0bfe7558ebe05063b6fa88212d7bbc26b07b"
+          },
+          {
+            "name": "wonad-native-permission-routing.patch",
+            "sha256": "b46e43aaab79c104d126ea6347bfea9de8c099befa152dea41677836b7510719"
+          },
+          {
+            "name": "wonad-native-shell-input-sink.patch",
+            "sha256": "e95bc70ebe3b1574080a7692b0a9e0e6b9abbb496bd46b471417b6c2348eb9be"
+          },
+          {
+            "name": "wonad-native-location-button-routing.patch",
+            "sha256": "935697613e9ea0486ddb9f722f8c0a9f9e937ca3dbc4be1aa6b98cfb8d10adee"
+          },
+          {
+            "name": "wonad-native-freeform-fallback.patch",
+            "sha256": "9cdaf5095b0b83a5c70d403c9cef8c03a4ff053f304aa6569cdbe4dd307dbf70"
+          },
+          {
+            "name": "wonad-native-shell-home-visibility.patch",
+            "sha256": "b40ffeac3cc3918dae2d9f14f56e97cce556326fd01adf498e042b506046b81e"
+          },
+          {
+            "name": "wonad-native-empty-stock-roots.patch",
+            "sha256": "7b2f9cd6896878bf2bda7743258eae0b07edb3f891a37f307f11f8e94851784c"
+          },
+          {
+            "name": "wonad-native-signed-frame.patch",
+            "sha256": "6f4ab926c46a3e358ea0642f9bdbff28994c133b060b11879d4e3dec476bbc9b"
+          },
+          {
+            "name": "wonad-native-shortcut-priority.patch",
+            "sha256": "c96760aa6f621d58dd8853983a6a31f8b23c5029cc24af48fc241b76472e26fd"
+          },
+          {
+            "name": "wonad-native-stock-gesture-ownership.patch",
+            "sha256": "99cf81b3c0d40231817a13a4dcaef20b97e67fa00bbe768e7b1f7b7a457e1015"
+          },
+          {
+            "name": "wonad-native-stock-decoration-ownership.patch",
+            "sha256": "4f832e4e95901f7595ea71c6bbcf7be29d7c1d5de113be81d6dfa5bc94e96f8b"
+          },
+          {
+            "name": "wonad-native-stock-decoration-boundary.patch",
+            "sha256": "abe9344b93b95eca3bec0ca03fca6f32ea4fc62d3a3f4e290d8557d748569f44"
+          },
+          {
+            "name": "wonad-native-home-resolution.patch",
+            "sha256": "beaf24fc3c1a69c2b63c07a73039219e93a1f2cdf75ab2b26c750ab2a9fecb59"
+          },
+          {
+            "name": "wonad-native-home-launch-params.patch",
+            "sha256": "d291f0b76cab1c1c22a56731bb7951daf42e264482a4ed5a523e08966c39a341"
+          },
+          {
+            "name": "wonad-native-stock-wallpaper-boundary.patch",
+            "sha256": "48de62c88ecd082bcb4aa4bb0ef31def4abcbb7ad171fdecfa1e4c6fc610c36f"
+          },
+          {
+            "name": "wonad-native-incoming-wallpaper-routes.patch",
+            "sha256": "d2840099df1a435179261d3fe4b3e402916ec807b00a22aa661d89b02a5aa761"
+          },
+          {
+            "name": "wonad-native-ime-parent-readiness.patch",
+            "sha256": "814f90411026aee23c814ac364ae1857f8e8193f7164d405d4146471459c37fe"
+          },
+          {
+            "name": "wonad-native-protected-display-raise.patch",
+            "sha256": "728137042f02608a9959e1407ac27aeec13af08846d03f6abd0bf79d838c3279"
+          },
+          {
+            "name": "wonad-native-stock-gesture-takeover.patch",
+            "sha256": "244f980afdd4479f3dca901338950a0833592aeccf6bde8d0cb1f304ca07adaa"
+          },
+          {
+            "name": "wonad-authoritative-focus-framework.patch",
+            "sha256": "f743ecd1ea8eeb4a930d5374e308709d492dbdf1d3513cb9e6250b76f8dbdb87"
+          },
+          {
+            "name": "wonad-native-phone-task-return.patch",
+            "sha256": "7cc8508a8671d2127178ac693dbea15c852360190f2d42d7d1f505188410db0c"
+          },
+          {
+            "name": "wonad-shortcut-keyset.patch",
+            "sha256": "b9b4522b6c64ee993a2ce7946d240658c099bbb8bd865d027386e9e61b8f7d80"
+          }
+        ]
+      }
+    },
+    "packages/apps/Launcher3": {
+      "repository": "forks/packages-apps-Launcher3.git",
+      "upstream": "https://github.com/GrapheneOS/platform_packages_apps_Launcher3",
+      "active": {
+        "emulator": {
+          "branch": "desktop/source-stack",
+          "commit": "c4a3841b708bd7e6f0078eb82a7fe5de8bfab554"
+        },
+        "pixel10": {
+          "branch": "desktop/source-stack",
+          "commit": "c4a3841b708bd7e6f0078eb82a7fe5de8bfab554"
+        }
+      },
+      "snapshots": [
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/wonad-grapheneos-2026100600",
+          "commit": "e8d0b1401082b7be802d7132e38aac25a0e83a06",
+          "tree": "31263ca2e7dfa16a8ce3fd06a5740517b43303ad",
+          "changes": []
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-frankel-baseline-1/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/frankel-baseline-1",
+          "commit": "9a3b851829644a11915d822ea81679118418539b",
+          "tree": "31263ca2e7dfa16a8ce3fd06a5740517b43303ad",
+          "changes": []
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-frankel-development-20261020-1/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/frankel-development-20261020-1",
+          "commit": "34be61fecff1afab61b3a4a2ba1b24d9b8e4c84b",
+          "tree": "f3c6fdec263ac4e997bc7507b5d0436b89a02b4e",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/OverviewCommandHelper.kt",
+              "mode": "100644",
+              "blob": "d8315445ea01ab1ac92194abc59c923eb8907028"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "a7152c77858f5076b098903dbb29fdb0f53d65f1"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/TopTaskTracker.java",
+              "mode": "100644",
+              "blob": "1681c59270144ff608ff2f2e868c33f3dd2f4b39"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/AndroidFocusRouter.kt",
+              "mode": "100644",
+              "blob": "d904b192a087a778ee59210efc0a165d8ab03b8f"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/TISBinder.kt",
+              "mode": "100644",
+              "blob": "88b3ee44027c5fce94fc500fbf86f20cd4643ba4"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-10/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-10",
+          "commit": "0638dff0a2beb8dbc11a12b4ceb5f5ca010a3073",
+          "tree": "7febb59a4b05869694c9e8a20ddbb97486012f2f",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/OverviewCommandHelper.kt",
+              "mode": "100644",
+              "blob": "d8315445ea01ab1ac92194abc59c923eb8907028"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "a7152c77858f5076b098903dbb29fdb0f53d65f1"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/AndroidFocusRouter.kt",
+              "mode": "100644",
+              "blob": "d904b192a087a778ee59210efc0a165d8ab03b8f"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/TISBinder.kt",
+              "mode": "100644",
+              "blob": "88b3ee44027c5fce94fc500fbf86f20cd4643ba4"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-11/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-11",
+          "commit": "afd8d80b3ff4f0f475759269327568ce6b006c8e",
+          "tree": "7febb59a4b05869694c9e8a20ddbb97486012f2f",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/OverviewCommandHelper.kt",
+              "mode": "100644",
+              "blob": "d8315445ea01ab1ac92194abc59c923eb8907028"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "a7152c77858f5076b098903dbb29fdb0f53d65f1"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/AndroidFocusRouter.kt",
+              "mode": "100644",
+              "blob": "d904b192a087a778ee59210efc0a165d8ab03b8f"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/TISBinder.kt",
+              "mode": "100644",
+              "blob": "88b3ee44027c5fce94fc500fbf86f20cd4643ba4"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-3/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-3",
+          "commit": "5cef8a236d843161960d3ffc40bbdb06e899502c",
+          "tree": "fcaef14c0c3ffe02e501f611929b3006b82aec5e",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "eba81648a552c09920e9cbb5e751ee1eed1efe9c"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-4/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-4",
+          "commit": "f01ef6db3a023122b4486f65a68375b076f72fd4",
+          "tree": "fcaef14c0c3ffe02e501f611929b3006b82aec5e",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "eba81648a552c09920e9cbb5e751ee1eed1efe9c"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-5/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-5",
+          "commit": "8c066fe27a07395b33f58ccb612a8d6a1428abdd",
+          "tree": "fcaef14c0c3ffe02e501f611929b3006b82aec5e",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "eba81648a552c09920e9cbb5e751ee1eed1efe9c"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-6/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-6",
+          "commit": "39ab7482008ec20f710d009c309f767dcf3153f7",
+          "tree": "fcaef14c0c3ffe02e501f611929b3006b82aec5e",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "eba81648a552c09920e9cbb5e751ee1eed1efe9c"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-7/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-7",
+          "commit": "a88c55c77994e316ce88ca5e5f0b46cdf9c3dfcb",
+          "tree": "fcaef14c0c3ffe02e501f611929b3006b82aec5e",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "eba81648a552c09920e9cbb5e751ee1eed1efe9c"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-8/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/phase1-custom-8",
+          "commit": "5b88ce9292b2179c1d1b6455499a79cafd669bd7",
+          "tree": "7febb59a4b05869694c9e8a20ddbb97486012f2f",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/OverviewCommandHelper.kt",
+              "mode": "100644",
+              "blob": "d8315445ea01ab1ac92194abc59c923eb8907028"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "a7152c77858f5076b098903dbb29fdb0f53d65f1"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/AndroidFocusRouter.kt",
+              "mode": "100644",
+              "blob": "d904b192a087a778ee59210efc0a165d8ab03b8f"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/sysuiconnection/TISBinder.kt",
+              "mode": "100644",
+              "blob": "88b3ee44027c5fce94fc500fbf86f20cd4643ba4"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-build/packages/apps/Launcher3",
+          "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+          "branch": "archive/wonad-grapheneos-build",
+          "commit": "5eb2e775ab8b4fbf17096e9403578382e9bb9e75",
+          "tree": "fcaef14c0c3ffe02e501f611929b3006b82aec5e",
+          "changes": [
+            {
+              "path": "quickstep/res/values/strings.xml",
+              "mode": "100644",
+              "blob": "1e9ba8751d87723e8f95c6675fd5b3aa65a35bfe"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/dagger/Modules.kt",
+              "mode": "100644",
+              "blob": "1a99abbd71429a48df3ed1c6a4a05c1e09a581ee"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt",
+              "mode": "100644",
+              "blob": "4b5c0961f4945e681317a72bddb400999bdccfd7"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/SafeViewManager.kt",
+              "mode": "100644",
+              "blob": "9543671bdb9d6296d9a3fb1756dc2ded27951df8"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+              "mode": "100644",
+              "blob": "268279fb47da639e14a7033633d21fff90d03197"
+            },
+            {
+              "path": "quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java",
+              "mode": "100644",
+              "blob": "b7d013ae2210ae64439c5897f3141a686d74752e"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/SystemUiProxy.kt",
+              "mode": "100644",
+              "blob": "eba81648a552c09920e9cbb5e751ee1eed1efe9c"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/WonadSendShortcut.kt",
+              "mode": "100644",
+              "blob": "c855f3f30a56085507b375af2699adff80924d01"
+            },
+            {
+              "path": "quickstep/src/com/android/quickstep/views/RecentsView.java",
+              "mode": "100644",
+              "blob": "10d058a91bf44dd950172d5cc278c8e137223a4b"
+            }
+          ]
+        }
+      ],
+      "previous_active": {
+        "emulator": {
+          "branch": "desktop/emulator",
+          "commit": "afd8d80b3ff4f0f475759269327568ce6b006c8e"
+        },
+        "pixel10": {
+          "branch": "desktop/pixel10",
+          "commit": "34be61fecff1afab61b3a4a2ba1b24d9b8e4c84b"
+        }
+      },
+      "current_declared_inputs": {
+        "commit": "c4a3841b708bd7e6f0078eb82a7fe5de8bfab554",
+        "tree": "f3c6fdec263ac4e997bc7507b5d0436b89a02b4e",
+        "upstream_base": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+        "patches": [
+          {
+            "name": "wonad-recents-launcher.patch",
+            "sha256": "e1738299e3412af53cf1a4d26b7ccd0842c2087f4689d2b702d8eabc593b89b3"
+          },
+          {
+            "name": "wonad-external-taskbar.patch",
+            "sha256": "6c952429de37d64001c63fb28fa512e8a1d133bd3ca370118214074759cef304"
+          },
+          {
+            "name": "wonad-external-taskbar-readiness.patch",
+            "sha256": "23f177750289f476dd3be2cfbc6f850719ce9e05b365dad96493956e91b4ce20"
+          },
+          {
+            "name": "wonad-native-taskbar-admission.patch",
+            "sha256": "456f9a8491688d5e2ca1ba9c97caa7375e15d516a1e0da3aeaf3c907bd7e0795"
+          },
+          {
+            "name": "wonad-authoritative-focus-launcher.patch",
+            "sha256": "f2135328a7357ef427bfc4ffbd370027956987937d0d548c422afe083c9028a8"
+          },
+          {
+            "name": "wonad-recents-display-task-cache.patch",
+            "sha256": "7c264e4e34af600024dc28c817d2ffaa89d1a38e5ca16a6327e2fb43041dea33"
+          }
+        ]
+      }
+    },
+    "device/generic/goldfish": {
+      "repository": "forks/device-generic-goldfish.git",
+      "upstream": "https://github.com/GrapheneOS/device_generic_goldfish",
+      "active": {
+        "emulator": {
+          "branch": "desktop/source-stack",
+          "commit": "26c65af7bcbb852933aec359117b9356e00bf300"
+        },
+        "pixel10": {
+          "branch": "desktop/source-stack",
+          "commit": "26c65af7bcbb852933aec359117b9356e00bf300"
+        }
+      },
+      "snapshots": [
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/wonad-grapheneos-2026100600",
+          "commit": "e8f50860d5c863869278307c537235a196d402de",
+          "tree": "7d97499361b5a14dd31045df9075df6dfa83bad3",
+          "changes": []
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-frankel-baseline-1/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/frankel-baseline-1",
+          "commit": "7bd0a28584005d29b9c6758861db5467ed0ab84a",
+          "tree": "7d97499361b5a14dd31045df9075df6dfa83bad3",
+          "changes": []
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-frankel-development-20261020-1/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/frankel-development-20261020-1",
+          "commit": "b07e7cae57bfd4b9e5612f79623347c836c822bb",
+          "tree": "26addf35ae5cfaab47d36dd00d7596be875adbc5",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "MultiDisplayProvider/jni/com_android_emulator_multidisplay.cpp",
+              "mode": "100644",
+              "blob": "fe0536a7e02d5a9636d2801690d0957d99fa89b3"
+            },
+            {
+              "path": "MultiDisplayProvider/src/com/android/emulator/multidisplay/MultiDisplayService.java",
+              "mode": "100644",
+              "blob": "c66aa1d748c6d191084312abcba789601e2ff4d3"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-10/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-10",
+          "commit": "aae239c1e08393e6352b61d773a55438b657938e",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-11/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-11",
+          "commit": "d43268d4a64bfbe174c5c34f7e9c10ee7a98683a",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-3/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-3",
+          "commit": "29104ce84208d7d4b9d3574ce5e53d6979917d57",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-4/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-4",
+          "commit": "f2fab921564def91e957cd240b7114dce61fb555",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-5/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-5",
+          "commit": "630fa37742710490a45e588a0a3c2795358586ae",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-6/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-6",
+          "commit": "8eac18396e875fbb18797ffb100117df8afea1c8",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-7/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-7",
+          "commit": "6ea2617a4a367121d026ef094cfbab8cbe93be32",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-2026100600-phase1-custom-8/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/phase1-custom-8",
+          "commit": "715b0e5643125a3a2e152d66ac18d1bc8c425fec",
+          "tree": "07f1f7d257fc561f7c78e0f991341d0db55bd55e",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        },
+        {
+          "source": "/u/elric/tree/wonad-grapheneos-build/device/generic/goldfish",
+          "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+          "branch": "archive/wonad-grapheneos-build",
+          "commit": "b49a2bf8caed604c881f2658d4a57460632c25f8",
+          "tree": "994fdc596760f9c2a60fb06c20b590fb6bd8f3cb",
+          "changes": [
+            {
+              "path": "64bitonly/product/sdk_phone64_x86_64.mk",
+              "mode": "100644",
+              "blob": "733d9c415381b69bc12309df471bb26a15370c72"
+            },
+            {
+              "path": "board/emu64x/BoardConfig.mk",
+              "mode": "100644",
+              "blob": "d8f19bd1b9f2a98b52fd69341ebc1bd072a92635"
+            },
+            {
+              "path": "input/qwerty2.kl",
+              "mode": "100644",
+              "blob": "1e5071106700d7365aaeffc7a30a0be5c59bf080"
+            }
+          ]
+        }
+      ],
+      "previous_active": {
+        "emulator": {
+          "branch": "desktop/emulator",
+          "commit": "d43268d4a64bfbe174c5c34f7e9c10ee7a98683a"
+        },
+        "pixel10": {
+          "branch": "desktop/pixel10",
+          "commit": "b07e7cae57bfd4b9e5612f79623347c836c822bb"
+        }
+      },
+      "current_declared_inputs": {
+        "commit": "26c65af7bcbb852933aec359117b9356e00bf300",
+        "tree": "26addf35ae5cfaab47d36dd00d7596be875adbc5",
+        "upstream_base": "1facfe03b3519c3413a51d2ea56400bbade0b4c3",
+        "patches": [
+          {
+            "name": "emulator-freeform.patch",
+            "sha256": "6e7f24f95749ec9071a069732af901e808f69ed76ba0be9058112c70033f1fb8"
+          },
+          {
+            "name": "emulator-meta-keys.patch",
+            "sha256": "efae5231a89190aada57512374ffe4a0144f7d2c88a07b43d09c723a157e0e28"
+          },
+          {
+            "name": "emulator-front-buffer-lifetime.patch",
+            "sha256": "f4eafdbe965295968a07d7ac5c19a0673405ee6832a451c5a0f6739e650a55b6"
+          },
+          {
+            "name": "emulator-multidisplay-startup-order.patch",
+            "sha256": "dda17e45a58d104e31b18620553cd3321c7d4ae71d2c19ccc5cf79dce41d47f5"
+          }
+        ]
+      }
+    }
+  }
+}

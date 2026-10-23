@@ -1,0 +1,13 @@
+diff --git a/services/core/java/com/android/server/wm/TaskOrganizerController.java b/services/core/java/com/android/server/wm/TaskOrganizerController.java
+--- a/services/core/java/com/android/server/wm/TaskOrganizerController.java
++++ b/services/core/java/com/android/server/wm/TaskOrganizerController.java
+@@ -431,6 +431,9 @@
+         void dispose() {
+             // Move organizer from managing specific windowing modes
+             mTaskOrganizers.remove(mOrganizer.mTaskOrganizer);
++            // Preserve only Wonad's exact leased external app objects before root teardown.
++            WonadFocusBridge.onOrganizerDisposing(
++                    mService.mWindowManager, mOrganizer.getBinder(), mUid);
+ 
+             // Update tasks currently managed by this organizer to the next one available if
+             // possible.

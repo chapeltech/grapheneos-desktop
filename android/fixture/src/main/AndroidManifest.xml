@@ -1,0 +1,111 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.CAPTURE_KEYBOARD" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <application android:label="Wonad desktop test fixture" android:allowBackup="false"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name=".ResetActivity" android:exported="true"
+            android:taskAffinity="org.wonad.fixture.reset" android:excludeFromRecents="true" />
+        <activity android:name=".PermissionActivity" android:exported="true"
+            android:label="Wonad runtime permission fixture"
+            android:taskAffinity="org.wonad.fixture.permissions" android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".OneActivity" android:exported="true"
+            android:taskAffinity="org.wonad.fixture.one" android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".TwoActivity" android:exported="true"
+            android:label="Wonad second desktop fixture"
+            android:taskAffinity="org.wonad.fixture.two" android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".FixedActivity" android:exported="true"
+            android:taskAffinity="org.wonad.fixture.fixed" android:resizeableActivity="false" />
+        <activity android:name=".LaunchActivity" android:exported="true"
+            android:label="Wonad picker launch fixture" android:taskAffinity="org.wonad.fixture.launch"
+            android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".PaletteOneActivity" android:exported="true"
+            android:label="Wonad Linux palette one" android:taskAffinity="org.wonad.fixture.palette.one"
+            android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".PaletteTwoActivity" android:exported="true"
+            android:label="Wonad Linux palette two" android:taskAffinity="org.wonad.fixture.palette.two"
+            android:resizeableActivity="true"
+            android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".BandedOneActivity" android:exported="true"
+            android:label="Wonad Linux banded one" android:taskAffinity="org.wonad.fixture.banded.one"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <activity android:name=".BandedTwoActivity" android:exported="true"
+            android:label="Wonad Linux banded two" android:taskAffinity="org.wonad.fixture.banded.two"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <activity android:name=".BandedThreeActivity" android:exported="true"
+            android:label="Wonad Linux banded three" android:taskAffinity="org.wonad.fixture.banded.three"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <activity android:name=".BandedFourActivity" android:exported="true"
+            android:label="Wonad Linux banded four" android:taskAffinity="org.wonad.fixture.banded.four"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <activity android:name=".BandedFiveActivity" android:exported="true"
+            android:label="Wonad Linux banded five" android:taskAffinity="org.wonad.fixture.banded.five"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <activity android:name=".KeyboardCaptureOneActivity" android:exported="true"
+            android:label="Wonad keyboard capture one" android:taskAffinity="org.wonad.fixture.keyboard.capture.one"
+            android:launchMode="standard" android:documentLaunchMode="always" android:excludeFromRecents="false"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <activity android:name=".KeyboardCaptureTwoActivity" android:exported="true"
+            android:label="Wonad keyboard capture two" android:taskAffinity="org.wonad.fixture.keyboard.capture.two"
+            android:launchMode="standard" android:documentLaunchMode="always" android:excludeFromRecents="false"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <activity android:name=".KeyboardCapturePhoneActivity" android:exported="true"
+            android:label="Wonad keyboard capture phone" android:taskAffinity="org.wonad.fixture.keyboard.capture.phone"
+            android:launchMode="standard" android:documentLaunchMode="always" android:excludeFromRecents="false"
+            android:resizeableActivity="true" android:configChanges="screenSize|smallestScreenSize|orientation|screenLayout|density">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "projects": [
+    {
+      "project": "frameworks/base",
+      "commit": "bb772f9c0929faa3024575d1f65ec0c37c970377",
+      "patch_count": 43
+    },
+    {
+      "project": "packages/apps/Launcher3",
+      "commit": "c4a3841b708bd7e6f0078eb82a7fe5de8bfab554",
+      "patch_count": 6
+    },
+    {
+      "project": "device/generic/goldfish",
+      "commit": "26c65af7bcbb852933aec359117b9356e00bf300",
+      "patch_count": 4
+    }
+  ],
+  "scope": "source_tree_import_not_runtime_qualification"
+}

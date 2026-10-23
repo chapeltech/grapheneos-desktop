@@ -1,0 +1,2283 @@
+#!/usr/bin/env python3
+"""Create and verify immutable Phase-1 source, builder and client provenance.
+
+The source record is made immediately before an OS build and rechecked by the
+release driver.  It binds every project from the authenticated stable manifest,
+all owned edits and generated vendor inputs.  Any other untracked/ignored file
+is rejected, so an Android.bp or blob outside the reviewed inputs cannot be
+silently discovered by the Android build.
+
+Client provenance is deliberately separate.  It binds the frozen SDK Maven
+publication and a release-signed conformance APK to the fresh compile receipt,
+without reading or recording a private signing key.
+"""
+
+from __future__ import annotations
+
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
+import zipfile
+
+
+ROOT = Path(__file__).resolve().parents[2]
+ANDROID = ROOT / "android"
+TOOLS = ANDROID / "tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import stage_contract  # noqa: E402
+
+DEFAULT_LOCK = ANDROID / "grapheneos.lock.json"
+DOCKERFILE = ANDROID / "platform/Dockerfile"
+SOURCE_SCHEMA = 5
+BUILDER_SCHEMA = 1
+CLIENT_SCHEMA = 3
+SHA256 = re.compile(r"[0-9a-f]{64}")
+GIT_SHA1 = re.compile(r"[0-9a-f]{40}")
+IMAGE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+PRIVATE_SUFFIXES = {".jks", ".key", ".keystore", ".p12", ".pfx", ".pk8"}
+PRIVATE_NAMES = {"id_ed25519", "id_ecdsa", "id_rsa", "avb.pem", "releasekey.key"}
+PRIVATE_COMPONENTS = {"keys", "private-keys", "private_keys", "secrets"}
+PRIVATE_MARKERS = (
+    b"BEGIN PRIVATE KEY", b"BEGIN ENCRYPTED PRIVATE KEY",
+    b"BEGIN RSA PRIVATE KEY", b"BEGIN EC PRIVATE KEY",
+    b"BEGIN OPENSSH PRIVATE KEY",
+)
+FORBIDDEN_BUILD_ROOTS = ("out", "out_adevtool_deps", "keys", "releases")
+GENERATED_ROOTS = ("external/wonad", "vendor/google_devices")
+GENERATED_FILES = (".wonad-updater-stage.json",)
+SDK_VERIFIER = ANDROID / "tools/verify_sdk_publication.py"
+
+# Phase-1 evidence is release evidence, rather than a best-effort developer
+# diagnostic.  Do not discover these programs through PATH and do not silently
+# accept a package upgrade.  Updating a pin is an explicit review event which
+# changes this generator's own digest and every newly-created provenance
+# record.  The versions and hashes below describe the 2026100600 build host.
+HOST_TOOL_PINS = {
+    "git": {
+        "path": "/usr/bin/git", "sha256": "86c21d0ccccfb45c107c213b693d1132413959f71c6b0a4165f07c5072d47b34",
+        "size": 4945312, "mode": 0o755, "version": "git version 2.55.0",
+        "version_args": ("--version",),
+    },
+    "git_lfs": {
+        "path": "/usr/bin/git-lfs", "sha256": "3fb93b8f144a3939479a9c3cc77c6827ba1ff7a4d748e441798b49fd51b87ee4",
+        "size": 13620008, "mode": 0o755,
+        "version": "git-lfs/3.7.1 (GitHub; linux amd64; go 1.26.5-X:nodwarf5)",
+        "version_args": ("version",),
+    },
+    "openssl": {
+        "path": "/usr/bin/openssl", "sha256": "ac3648bc6db6ba9c9be4da0abf04ed6c28cdac6f6757f83f0e3d6d29f33248f4",
+        "size": 999656, "mode": 0o755,
+        "version": "OpenSSL 3.5.8 25 Aug 2026 (Library: OpenSSL 3.5.8 25 Aug 2026)",
+        "version_args": ("version",),
+    },
+    "python": {
+        "path": "/usr/bin/python3.14", "sha256": "0d64bd6d66d68dac91cdadafc46e22d4f09f22bdc997aaae870f42865b024a3e",
+        "size": 11544, "mode": 0o755, "version": "Python 3.14.7",
+        "version_args": ("--version",),
+    },
+}
+
+GIT_CONFIG_ALLOWED_LFS = {
+    "filter.lfs.smudge": "git-lfs smudge --skip -- %f",
+    "filter.lfs.process": "git-lfs filter-process --skip",
+}
+GIT_RAW_AUDIT_POLICY = {
+    "object_format": "sha1",
+    "index_flags": "H-only-no-assume-unchanged-or-skip-worktree",
+    "tracked_bytes": "raw-git-blob-or-authenticated-lfs-or-eol-v2",
+    "filters": "never-executed-during-worktree-byte-audit",
+    "lazy_fetch": False,
+    "replacement_objects": False,
+    "sparse_checkout": False,
+    # Some signed upstream Android projects contain Git tree entries for
+    # deliberately unpopulated submodules.  Their commit object is already
+    # authenticated transitively by the manifest-pinned parent HEAD.  Accept
+    # only an absent path or an ordinary, completely empty directory: no
+    # submodule checkout, .git file, or nested build input may enter the build.
+    "gitlinks": "authenticated-parent-tree-bound-absent-or-empty-directory-v2",
+    # Git is allowed to materialize the one narrow, signed checkout-time EOL
+    # transformation used by upstream projects: a UTF-8 text blob containing
+    # LF (and no CR) may be checked out with CRLF only when the committed
+    # attributes say ``eol=crlf`` and leave ``text`` unset or set it to either
+    # ``set`` or ``auto``.  The object and resulting worktree identities are
+    # both recorded below for each accepted path.  No filter, ident, encoding,
+    # heuristic output, or other Git-generated byte stream is trusted.
+    "eol_materialization": "cached-eol-crlf-exact-lf-to-crlf-v2",
+}
+
+EOL_MATERIALIZATION_INERT_ATTRIBUTES = {
+    "eol": "crlf",
+    "filter": "unspecified",
+    "ident": "unspecified",
+    "working-tree-encoding": "unspecified",
+}
+EOL_MATERIALIZATION_TEXT_VALUES = {"auto", "set", "unspecified"}
+
+PRODUCTION_TARGET = {
+    "device": "Pixel 10", "product": "frankel", "abi": "arm64-v8a",
+    "variant": "user", "lunch_target": "frankel-cur-user",
+    "artifact_scope": "factory_full_incremental_ota_only",
+}
+EMULATOR_TARGET = {
+    "device": "generic x86_64 emulator", "product": "sdk_phone64_x86_64",
+    "abi": "x86_64", "variant": "userdebug",
+    "lunch_target": "sdk_phone64_x86_64-cur-userdebug",
+    "artifact_scope": "source_matched_development_runtime_only",
+}
+
+
+class ProvenanceError(ValueError):
+    """A fail-closed provenance validation error."""
+
+
+def require(condition, message):
+    if not condition:
+        raise ProvenanceError(message)
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ProvenanceError(f"Duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def load_json(path: Path):
+    require(path.is_file() and not path.is_symlink(), f"Expected ordinary JSON file: {path}")
+    try:
+        return json.loads(path.read_text(), object_pairs_hook=unique_object)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProvenanceError(f"Invalid JSON in {path}: {error}") from error
+
+
+def safe_relative(value: str) -> PurePosixPath:
+    require(isinstance(value, str) and value and "\x00" not in value,
+            "Invalid empty or NUL-containing path")
+    path = PurePosixPath(value)
+    require(not path.is_absolute() and path.as_posix() == value and
+            all(part not in {"", ".", ".."} for part in path.parts),
+            f"Unsafe or non-canonical path: {value!r}")
+    return path
+
+
+def private_key_like(relative: PurePosixPath) -> bool:
+    parts = {part.lower() for part in relative.parts}
+    name = relative.name.lower()
+    return bool(parts & PRIVATE_COMPONENTS) or name in PRIVATE_NAMES or relative.suffix.lower() in PRIVATE_SUFFIXES
+
+
+def file_ref(path: Path, *, relative: PurePosixPath | None = None, include_mode=False,
+             reject_private_content=False):
+    """Hash a stable ordinary file without following a final symlink."""
+    if relative is not None and private_key_like(relative):
+        raise ProvenanceError(f"Refusing to inventory key-like path: {relative}")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise ProvenanceError(f"Cannot open ordinary provenance input {path}: {error}") from error
+    try:
+        before = os.fstat(descriptor)
+        require(stat.S_ISREG(before.st_mode), f"Provenance input is not an ordinary file: {path}")
+        digest = hashlib.sha256()
+        prefix = bytearray()
+        while True:
+            block = os.read(descriptor, 1024 * 1024)
+            if not block:
+                break
+            if len(prefix) < 1024 * 1024:
+                prefix.extend(block[:1024 * 1024 - len(prefix)])
+            digest.update(block)
+        after = os.fstat(descriptor)
+        identity = lambda value: (value.st_dev, value.st_ino, value.st_mode,
+                                  value.st_size, value.st_mtime_ns)
+        require(identity(before) == identity(after), f"File changed while hashing: {path}")
+        if (reject_private_content or relative is not None) and any(marker in prefix for marker in PRIVATE_MARKERS):
+            raise ProvenanceError(f"Refusing to inventory private-key material: {path}")
+        result = {"sha256": digest.hexdigest(), "size": before.st_size}
+        if include_mode:
+            result["mode"] = stat.S_IMODE(before.st_mode)
+        return result
+    finally:
+        os.close(descriptor)
+
+
+def hermetic_environment(*, git=False, openssl=False):
+    """Return a deliberately small environment for provenance subprocesses.
+
+    In particular, never inherit ``GIT_DIR``, ``GIT_WORK_TREE``, config
+    injection, credential helpers, ``LD_PRELOAD`` or a caller-controlled PATH.
+    Git's local config is inspected separately before it is allowed to affect
+    repository discovery.  Network-backed partial-clone fetches are forbidden:
+    all objects needed to authenticate an already-checked-out source tree must
+    already be present.
+    """
+    result = {
+        "HOME": "/nonexistent",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/usr/bin:/bin",
+        "TZ": "UTC",
+        "XDG_CONFIG_HOME": "/nonexistent",
+    }
+    if git:
+        result.update({
+            "GIT_ATTR_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_LITERAL_PATHSPECS": "1",
+            "GIT_NO_LAZY_FETCH": "1",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_PAGER": "cat",
+            "GIT_TERMINAL_PROMPT": "0",
+            "PAGER": "cat",
+        })
+    if openssl:
+        # X.509 decoding needs no host policy file.  An inherited or mutable
+        # OPENSSL_CONF must not change the parsing operation.
+        result["OPENSSL_CONF"] = "/dev/null"
+    return result
+
+
+def _pinned_tool_record(pin):
+    return {
+        "path": pin["path"],
+        "file": {"sha256": pin["sha256"], "size": pin["size"], "mode": pin["mode"]},
+        "version": pin["version"],
+    }
+
+
+def expected_host_tool_ledger():
+    return {name: _pinned_tool_record(pin) for name, pin in sorted(HOST_TOOL_PINS.items())}
+
+
+def _host_tool_uncached(name: str):
+    """Validate one absolute, root-owned host tool against the release pin."""
+    pin = HOST_TOOL_PINS.get(name)
+    require(pin is not None, f"Unknown pinned host tool: {name}")
+    path = Path(pin["path"])
+    if name == "python":
+        require(Path(sys.executable).resolve(strict=True) == path,
+                "Phase-1 provenance must run under the pinned Python interpreter")
+    require(path.is_absolute() and not path.is_symlink(),
+            f"Pinned host tool is missing or symlinked: {path}")
+    try:
+        metadata = path.stat()
+    except OSError as error:
+        raise ProvenanceError(f"Cannot stat pinned host tool {path}: {error}") from error
+    require(stat.S_ISREG(metadata.st_mode) and metadata.st_uid == 0 and metadata.st_gid == 0 and
+            not (metadata.st_mode & 0o022),
+            f"Pinned host tool has unsafe ownership/type/mode: {path}")
+    reference = file_ref(path, include_mode=True)
+    expected = {"sha256": pin["sha256"], "size": pin["size"], "mode": pin["mode"]}
+    require(reference == expected, f"Pinned host tool identity differs: {path}")
+    try:
+        version = subprocess.check_output(
+            [str(path), *pin["version_args"]], stderr=subprocess.STDOUT,
+            env=hermetic_environment(openssl=name == "openssl"), text=True,
+            timeout=30).strip()
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise ProvenanceError(f"Cannot execute pinned host tool {path}") from error
+    require(version == pin["version"], f"Pinned host tool version differs: {path}")
+    return _pinned_tool_record(pin)
+
+
+@lru_cache(maxsize=None)
+def host_tool(name: str):
+    return _host_tool_uncached(name)
+
+
+def host_tool_ledger():
+    result = {name: _host_tool_uncached(name) for name in sorted(HOST_TOOL_PINS)}
+    require(result == expected_host_tool_ledger(), "Pinned host-tool ledger differs")
+    return result
+
+
+def canonical_digest(value) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def atomic_new(path: Path, value):
+    require(not path.exists() and not path.is_symlink(), f"Refusing to overwrite provenance: {path}")
+    require(path.parent.is_dir() and not path.parent.is_symlink(),
+            "Provenance output parent must be an ordinary existing directory")
+    payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".phase1-provenance.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        os.link(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def checked_output(argv, *, timeout=60, env=None) -> str:
+    try:
+        return subprocess.check_output(argv, stderr=subprocess.STDOUT, text=True, env=env,
+                                       timeout=timeout).strip()
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        output = getattr(error, "output", "")
+        raise ProvenanceError(f"Command failed: {argv!r}: {output}") from error
+
+
+def validate_lock(lock):
+    require(isinstance(lock, dict) and lock.get("schema") == 2, "GrapheneOS lock schema 2 is required")
+    require(lock.get("device") == "frankel", "GrapheneOS lock must select frankel")
+    manifest = lock.get("manifest")
+    repo_tool = lock.get("repo_tool")
+    builder = lock.get("builder")
+    require(isinstance(manifest, dict) and GIT_SHA1.fullmatch(str(manifest.get("commit", ""))) and
+            SHA256.fullmatch(str(manifest.get("default_xml_sha256", ""))) and
+            type(manifest.get("default_xml_size")) is int and manifest["default_xml_size"] > 0,
+            "Lock lacks authenticated default manifest identity")
+    require(isinstance(repo_tool, dict) and GIT_SHA1.fullmatch(str(repo_tool.get("commit", ""))) and
+            isinstance(repo_tool.get("revision"), str), "Lock lacks repo tool identity")
+    require(isinstance(builder, dict) and IMAGE_DIGEST.fullmatch(str(builder.get("image_digest", ""))) and
+            builder.get("platform") == "linux/amd64" and
+            SHA256.fullmatch(str(builder.get("dockerfile_sha256", ""))),
+            "Lock lacks immutable builder identity")
+    goldfish = lock.get("emulator_goldfish")
+    require(isinstance(goldfish, dict) and GIT_SHA1.fullmatch(str(goldfish.get("commit", ""))) and
+            isinstance(goldfish.get("url"), str), "Lock lacks emulator Goldfish identity")
+    return lock
+
+
+def builder_subset(inspect):
+    require(isinstance(inspect, dict), "Docker inspect result is not an object")
+    config = inspect.get("Config")
+    rootfs = inspect.get("RootFS")
+    require(isinstance(config, dict) and isinstance(rootfs, dict), "Docker inspect lacks config/rootfs")
+    selected_config = {key: config.get(key) for key in
+                       ("User", "Env", "Entrypoint", "Cmd", "WorkingDir", "Labels")}
+    return {
+        "id": inspect.get("Id"),
+        "repo_digests": sorted(inspect.get("RepoDigests") or []),
+        "os": inspect.get("Os"),
+        "architecture": inspect.get("Architecture"),
+        "size": inspect.get("Size"),
+        "rootfs": {"type": rootfs.get("Type"), "layers": rootfs.get("Layers")},
+        "config": selected_config,
+    }
+
+
+def validate_builder(record, lock):
+    require(isinstance(record, dict) and set(record) == {
+        "schema", "kind", "reference", "image", "identity_sha256", "dockerfile", "runtime"
+    }, "Unexpected builder provenance fields")
+    require(record["schema"] == BUILDER_SCHEMA and record["kind"] == "wonad-phase1-builder",
+            "Unsupported builder provenance")
+    expected = lock["builder"]
+    image = record["image"]
+    require(record["reference"] == expected["reference"] and isinstance(image, dict),
+            "Builder reference differs from lock")
+    require(image.get("id") == expected["image_digest"] and image.get("os") == "linux" and
+            image.get("architecture") == "amd64" and image.get("rootfs", {}).get("type") == "layers" and
+            isinstance(image.get("rootfs", {}).get("layers"), list) and image["rootfs"]["layers"],
+            "Builder image identity/platform differs from lock")
+    require(record["identity_sha256"] == canonical_digest(image), "Builder canonical identity digest differs")
+    dockerfile = record["dockerfile"]
+    require(isinstance(dockerfile, dict) and dockerfile.get("sha256") == expected["dockerfile_sha256"] and
+            type(dockerfile.get("size")) is int and dockerfile["size"] > 0,
+            "Builder Dockerfile identity differs from lock")
+    runtime = record["runtime"]
+    require(runtime == {"node": expected["node_version"], "yarn": expected["yarn_version"]},
+            "Builder Node/yarn runtime differs from lock")
+    config = image.get("config", {})
+    require(config.get("User") == "builder" and config.get("WorkingDir") == "/sources" and
+            config.get("Cmd") == ["bash"] and config.get("Entrypoint") in (None, []),
+            "Builder execution config differs")
+    environment = config.get("Env")
+    require(isinstance(environment, list) and
+            "PATH=/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" in environment,
+            "Builder PATH differs")
+    return record
+
+
+def capture_builder(image_reference: str, lock_path: Path):
+    lock = validate_lock(load_json(lock_path))
+    require(image_reference == lock["builder"]["reference"] or
+            image_reference == lock["builder"]["image_digest"],
+            "Builder must be selected by the locked reference or digest")
+    raw = checked_output(["docker", "image", "inspect", image_reference], timeout=60)
+    try:
+        rows = json.loads(raw, object_pairs_hook=unique_object)
+    except json.JSONDecodeError as error:
+        raise ProvenanceError("Docker inspect returned invalid JSON") from error
+    require(isinstance(rows, list) and len(rows) == 1, "Docker inspect must return exactly one image")
+    image = builder_subset(rows[0])
+    runtime_output = checked_output([
+        "docker", "run", "--rm", "--network", "none", "--read-only",
+        "--entrypoint", "/bin/sh", image_reference, "-c",
+        "node --version && yarnpkg --version",
+    ], timeout=60).splitlines()
+    require(len(runtime_output) == 2, "Builder runtime version probe differs")
+    record = {
+        "schema": BUILDER_SCHEMA,
+        "kind": "wonad-phase1-builder",
+        "reference": lock["builder"]["reference"],
+        "image": image,
+        "identity_sha256": canonical_digest(image),
+        "dockerfile": file_ref(DOCKERFILE),
+        "runtime": {"node": runtime_output[0], "yarn": runtime_output[1]},
+    }
+    return validate_builder(record, lock)
+
+
+def _parse_manifest_payload(payload: bytes):
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError as error:
+        raise ProvenanceError(f"Cannot parse default manifest: {error}") from error
+    require(root.tag == "manifest", "Default manifest root is not manifest")
+    projects = []
+    paths = set()
+    for element in root.findall(".//project"):
+        name = element.get("name")
+        path_value = element.get("path") or name
+        revision = element.get("revision")
+        remote = element.get("remote")
+        require(name and path_value and revision and GIT_SHA1.fullmatch(revision),
+                f"Manifest project is not pinned: {path_value or name}")
+        path_value = safe_relative(path_value).as_posix()
+        require(path_value not in paths, f"Duplicate manifest project path: {path_value}")
+        paths.add(path_value)
+        projects.append({"path": path_value, "name": name, "revision": revision,
+                         "remote": remote})
+    require(projects, "Default manifest has no projects")
+    return root, sorted(projects, key=lambda row: row["path"])
+
+
+def parse_manifest(path: Path):
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        raise ProvenanceError(f"Cannot parse default manifest: {error}") from error
+    return _parse_manifest_payload(payload)[1]
+
+
+def manifest_checkout_materializations(source: Path, manifest_payload: bytes, projects, states):
+    """Validate repo's authenticated ``linkfile``/``copyfile`` outputs.
+
+    These paths live outside the Git worktree which supplies their bytes, so a
+    plain union of every project's tracked files does not own them.  They are
+    nevertheless build inputs fixed by the signed manifest.  Accept only the
+    exact materialization produced by repo: literal relative symlinks for
+    ``linkfile`` and byte-identical, read-only ordinary files for ``copyfile``.
+    The returned ledger is deterministic and is also useful for a second
+    end-of-audit check which closes substitution races around the source walk.
+
+    Wildcard linkfiles are deliberately unsupported.  The pinned GrapheneOS
+    manifest does not use them, and expanding a glob would make the accepted
+    source inventory depend on otherwise-unowned directory entries.
+    """
+    require(isinstance(manifest_payload, bytes) and manifest_payload,
+            "Authenticated manifest payload is missing")
+    root, parsed_projects = _parse_manifest_payload(manifest_payload)
+    expected_projects = {
+        (row["path"], row["name"], row["revision"], row["remote"])
+        for row in projects
+    }
+    actual_projects = {
+        (row["path"], row["name"], row["revision"], row["remote"])
+        for row in parsed_projects
+    }
+    require(actual_projects == expected_projects,
+            "Manifest project ledger changed while validating checkout materializations")
+    state_paths = {}
+    all_tracked = set()
+    for project_path, _dirty, tracked in states:
+        require(project_path not in state_paths and isinstance(tracked, list),
+                "Invalid project state for manifest materializations")
+        state_paths[project_path] = set(tracked)
+        all_tracked.update(f"{project_path}/{name}" for name in tracked)
+    require(set(state_paths) == {row["path"] for row in projects},
+            "Project state ledger differs from authenticated manifest")
+
+    def literal_path(relative: PurePosixPath, label: str, *, final_kinds):
+        current = source
+        for index, part in enumerate(relative.parts):
+            current = current / part
+            try:
+                mode = current.lstat().st_mode
+            except OSError as error:
+                raise ProvenanceError(f"Missing {label}: {relative}") from error
+            if index + 1 < len(relative.parts):
+                require(stat.S_ISDIR(mode) and not stat.S_ISLNK(mode),
+                        f"{label} traverses a non-directory or symlink: {relative}")
+            else:
+                require(any(check(mode) for check in final_kinds),
+                        f"{label} has an unsupported filesystem type: {relative}")
+        return current
+
+    ledger = {}
+    for element in root.findall(".//project"):
+        project_name = element.get("name")
+        project_value = element.get("path") or project_name
+        require(project_name and project_value, "Manifest materialization lacks a project")
+        project_path = safe_relative(project_value)
+        for child in element:
+            if child.tag not in {"linkfile", "copyfile"}:
+                continue
+            require(set(child.attrib) == {"src", "dest"},
+                    f"Manifest {child.tag} has unsupported attributes")
+            source_value = child.get("src")
+            destination_value = child.get("dest")
+            require(source_value is not None and destination_value is not None,
+                    f"Manifest {child.tag} lacks src/dest")
+            require(not any(character in source_value for character in "*?["),
+                    f"Wildcard manifest {child.tag} is unsupported: {source_value}")
+            require(source_value != ".",
+                    "Project-root manifest linkfiles are unsupported")
+            source_relative = PurePosixPath(
+                project_path.as_posix(), safe_relative(source_value).as_posix())
+            destination_relative = safe_relative(destination_value)
+            require(destination_relative.parts[0] != ".repo",
+                    "Manifest materialization cannot write repo metadata")
+            destination_name = destination_relative.as_posix()
+            require(destination_name not in ledger,
+                    f"Duplicate manifest materialization destination: {destination_name}")
+            require(destination_name not in all_tracked and
+                    not any(name.startswith(destination_name + "/") for name in all_tracked),
+                    f"Manifest materialization collides with a tracked path: {destination_name}")
+
+            source_path = literal_path(
+                source_relative, "manifest materialization source",
+                final_kinds=(stat.S_ISREG, stat.S_ISDIR))
+            source_mode = source_path.lstat().st_mode
+            source_permissions = stat.S_IMODE(source_mode)
+            require((stat.S_ISREG(source_mode) and source_permissions in {0o644, 0o755}) or
+                    (stat.S_ISDIR(source_mode) and source_permissions == 0o755),
+                    f"Manifest materialization source has non-canonical permissions: "
+                    f"{source_relative}")
+            project_tracked = state_paths[project_path.as_posix()]
+            if stat.S_ISREG(source_mode):
+                require(source_value in project_tracked,
+                        f"Manifest materialization source is not tracked: {source_relative}")
+            else:
+                prefix = source_value.rstrip("/") + "/"
+                require(child.tag == "linkfile" and
+                        any(name.startswith(prefix) for name in project_tracked),
+                        f"Manifest linkfile directory has no tracked contents: {source_relative}")
+            destination_parent = (PurePosixPath(*destination_relative.parts[:-1])
+                                  if len(destination_relative.parts) > 1 else None)
+            if destination_parent is not None:
+                literal_path(destination_parent, "manifest materialization parent",
+                             final_kinds=(stat.S_ISDIR,))
+            destination_path = source / destination_relative
+            if child.tag == "linkfile":
+                destination_path = literal_path(
+                    destination_relative, "manifest linkfile destination",
+                    final_kinds=(stat.S_ISLNK,))
+                expected_target = os.path.relpath(source_path, destination_path.parent)
+                first_target = os.readlink(destination_path)
+                require(first_target == expected_target and not os.path.isabs(first_target),
+                        f"Manifest linkfile target differs: {destination_name}")
+                source_before = source_path.lstat()
+                require(os.readlink(destination_path) == first_target and
+                        source_path.lstat() == source_before,
+                        f"Manifest linkfile changed during audit: {destination_name}")
+                ledger[destination_name] = {
+                    "kind": "linkfile",
+                    "project": project_path.as_posix(),
+                    "source": source_value,
+                    "target": first_target,
+                }
+            else:
+                require(stat.S_ISREG(source_path.lstat().st_mode),
+                        f"Manifest copyfile source is not ordinary: {source_relative}")
+                destination_path = literal_path(
+                    destination_relative, "manifest copyfile destination",
+                    final_kinds=(stat.S_ISREG,))
+                source_stat = source_path.stat()
+                destination_stat = destination_path.stat()
+                require((source_stat.st_dev, source_stat.st_ino) !=
+                        (destination_stat.st_dev, destination_stat.st_ino),
+                        f"Manifest copyfile aliases its source inode: {destination_name}")
+                require(destination_stat.st_nlink == 1,
+                        f"Manifest copyfile destination does not have a private inode: "
+                        f"{destination_name}")
+                source_ref = file_ref(source_path, include_mode=True)
+                destination_ref = file_ref(destination_path, include_mode=True)
+                expected_mode = source_ref["mode"] & ~(
+                    stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+                require(destination_ref["sha256"] == source_ref["sha256"] and
+                        destination_ref["size"] == source_ref["size"] and
+                        destination_ref["mode"] == expected_mode and
+                        file_ref(source_path, include_mode=True) == source_ref and
+                        file_ref(destination_path, include_mode=True) == destination_ref,
+                        f"Manifest copyfile differs from its source: {destination_name}")
+                ledger[destination_name] = {
+                    "kind": "copyfile",
+                    "project": project_path.as_posix(),
+                    "source": source_value,
+                    "file": {"sha256": source_ref["sha256"], "size": source_ref["size"]},
+                    "source_mode": source_ref["mode"],
+                    "destination_mode": destination_ref["mode"],
+                }
+    return dict(sorted(ledger.items()))
+
+
+def _ordinary_metadata_file(path: Path, label: str, *, allow_empty=True):
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise ProvenanceError(f"Missing {label}: {path}") from error
+    require(stat.S_ISREG(metadata.st_mode), f"{label} is not an ordinary file: {path}")
+    reference = file_ref(path, include_mode=True)
+    require(allow_empty or reference["size"] > 0, f"{label} is empty: {path}")
+    return reference
+
+
+def _git_config_entries(config: Path):
+    host_tool("git")
+    try:
+        payload = subprocess.check_output([
+            HOST_TOOL_PINS["git"]["path"], "config", "--file", str(config),
+            "--no-includes", "--null", "--list",
+        ], stderr=subprocess.STDOUT, env=hermetic_environment(git=True), timeout=30)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise ProvenanceError(f"Cannot parse local Git config: {config}") from error
+    require(not payload or payload.endswith(b"\0"), f"Malformed local Git config: {config}")
+    result = {}
+    for raw in payload.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            key_raw, value_raw = raw.split(b"\n", 1)
+            key = key_raw.decode("utf-8").lower()
+            value = value_raw.decode("utf-8")
+        except (ValueError, UnicodeDecodeError) as error:
+            raise ProvenanceError(f"Malformed/non-UTF-8 local Git config: {config}") from error
+        require(key not in result, f"Duplicate local Git config key is forbidden: {key}")
+        result[key] = value
+    return result
+
+
+def _validate_git_config(config: Path, *, project=None):
+    reference = _ordinary_metadata_file(config, "Git config", allow_empty=False)
+    entries = _git_config_entries(config)
+    forbidden = {
+        "core.attributesfile", "core.excludesfile", "core.fsmonitor", "core.hookspath",
+        "core.sparsecheckout", "core.sparsecheckoutcone", "core.worktree",
+        "extensions.objectformat", "extensions.worktreeconfig", "index.sparse",
+    }
+    require(not any(key in forbidden or key.startswith(("include.", "includeif.",
+                                                        "submodule.", "url."))
+                    for key in entries),
+            f"Git config contains a source-audit override: {config}")
+    require(entries.get("core.filemode") == "true" and
+            entries.get("core.repositoryformatversion") in {"0", "1"} and
+            entries.get("core.bare", "false") == "false",
+            f"Git config has unsupported core repository settings: {config}")
+    require(not any(key.startswith("filter.") and
+                    (key not in GIT_CONFIG_ALLOWED_LFS or
+                     entries[key] != GIT_CONFIG_ALLOWED_LFS[key])
+                    for key in entries),
+            f"Git config contains an unreviewed content filter: {config}")
+    require(not any(key.startswith("diff.") and
+                    key.rsplit(".", 1)[-1] in {"command", "textconv", "cachetextconv"}
+                    for key in entries),
+            f"Git config contains an external diff/textconv driver: {config}")
+
+    if project is not None:
+        remote = project.get("remote") or "aosp"
+        prefix = f"remote.{remote}."
+        allowed = {
+            "core.repositoryformatversion", "core.filemode",
+            *GIT_CONFIG_ALLOWED_LFS,
+            "maintenance.auto", "gc.auto", "extensions.partialclone",
+            prefix + "url", prefix + "review", prefix + "projectname",
+            prefix + "fetch", prefix + "partialclonefilter",
+        }
+        require(set(entries).issubset(allowed),
+                f"Project Git config has unreviewed fields: {project['path']}")
+        require(entries.get("core.repositoryformatversion") == "1" and
+                entries.get("extensions.partialclone") == remote and
+                entries.get(prefix + "projectname") == project["name"] and
+                entries.get(prefix + "fetch") == f"+refs/heads/*:refs/remotes/{remote}/*" and
+                entries.get(prefix + "partialclonefilter") == "blob:limit=10485760" and
+                entries.get("maintenance.auto", "false") == "false" and
+                entries.get("gc.auto", "0") == "0",
+                f"Project Git config differs from the repo partial-clone policy: {project['path']}")
+        url = entries.get(prefix + "url", "")
+        allowed_prefix = {
+            "aosp": "https://android.googlesource.com/",
+            "grapheneos": "https://github.com/GrapheneOS/",
+            "grapheneos-gitlab": "https://gitlab.com/grapheneos/",
+        }.get(remote)
+        require(allowed_prefix is not None and url.startswith(allowed_prefix) and
+                "\n" not in url and "\r" not in url,
+                f"Project Git remote is outside the reviewed transport/domain: {project['path']}")
+        require(entries.get("filter.lfs.smudge") == GIT_CONFIG_ALLOWED_LFS["filter.lfs.smudge"] and
+                entries.get("filter.lfs.process") == GIT_CONFIG_ALLOWED_LFS["filter.lfs.process"],
+                f"Project Git-LFS checkout policy differs: {project['path']}")
+    return {"file": reference, "entries_sha256": canonical_digest(entries)}
+
+
+def _git_context(repository: Path, *, project=None):
+    require(repository.is_dir() and not repository.is_symlink(),
+            f"Git worktree is missing or symlinked: {repository}")
+    dot_git = repository / ".git"
+    try:
+        dot_mode = dot_git.lstat().st_mode
+    except OSError as error:
+        raise ProvenanceError(f"Git worktree lacks .git metadata: {repository}") from error
+    require(stat.S_ISDIR(dot_mode) or stat.S_ISLNK(dot_mode),
+            f"Git .git metadata must be a directory or reviewed repo symlink: {repository}")
+    try:
+        git_dir = dot_git.resolve(strict=True)
+    except OSError as error:
+        raise ProvenanceError(f"Cannot resolve Git metadata for {repository}: {error}") from error
+    require(git_dir.is_dir() and not git_dir.is_symlink(),
+            f"Git metadata target is not an ordinary directory: {repository}")
+    config = git_dir / "config"
+    config_record = _validate_git_config(config, project=project)
+    index = git_dir / "index"
+    _ordinary_metadata_file(index, "Git index", allow_empty=False)
+    info_exclude = git_dir / "info/exclude"
+    exclude_reference = _ordinary_metadata_file(info_exclude, "Git info/exclude")
+    try:
+        exclude_lines = info_exclude.read_text().splitlines()
+    except (OSError, UnicodeDecodeError) as error:
+        raise ProvenanceError(f"Cannot read Git info/exclude: {info_exclude}") from error
+    require(not any(line.strip() and not line.lstrip().startswith("#") for line in exclude_lines),
+            f"Git info/exclude contains active ignore rules: {repository}")
+    for relative, label in (
+            ("info/attributes", "per-repository attributes"),
+            ("info/grafts", "grafts"),
+            ("objects/info/alternates", "object alternates"),
+            ("commondir", "linked-worktree commondir"),
+            ("config.worktree", "linked-worktree config")):
+        path = git_dir / relative
+        require(not path.exists() and not path.is_symlink(),
+                f"Git {label} are forbidden: {repository}")
+    replace = git_dir / "refs/replace"
+    require(not replace.exists() and not replace.is_symlink(),
+            f"Git replacement refs are forbidden: {repository}")
+    sparse = git_dir / "info/sparse-checkout"
+    require(not sparse.exists() and not sparse.is_symlink(),
+            f"Git sparse checkout is forbidden: {repository}")
+    return {
+        "repository": repository,
+        "git_dir": git_dir,
+        "config": config_record,
+        "info_exclude": exclude_reference,
+        "dot_git_mode": dot_mode,
+        "dot_git_target": os.readlink(dot_git) if stat.S_ISLNK(dot_mode) else None,
+    }
+
+
+def _project_git_context(source: Path, row):
+    repository = source / row["path"]
+    context = _git_context(repository, project=row)
+    expected_git_dir = source / ".repo/projects" / (row["path"] + ".git")
+    require(expected_git_dir.is_dir() and not expected_git_dir.is_symlink() and
+            os.path.samefile(context["git_dir"], expected_git_dir) and
+            context["dot_git_target"] is not None,
+            f"Project Git metadata is not the canonical repo-managed gitdir: {row['path']}")
+    project_name = safe_relative(row["name"])
+    expected_objects = source / ".repo/project-objects" / (project_name.as_posix() + ".git") / "objects"
+    objects = context["git_dir"] / "objects"
+    require(objects.is_symlink() and expected_objects.is_dir() and not expected_objects.is_symlink() and
+            os.path.samefile(objects.resolve(strict=True), expected_objects),
+            f"Project object store is not the canonical repo-managed store: {row['path']}")
+    context["record"] = {
+        "config": context["config"],
+        "gitdir": expected_git_dir.relative_to(source).as_posix(),
+        "info_exclude": context["info_exclude"],
+        "object_store": expected_objects.relative_to(source).as_posix(),
+    }
+    return context
+
+
+GIT_COMMAND_OVERRIDES = (
+    "core.attributesFile=/dev/null",
+    "core.excludesFile=/dev/null",
+    "core.fsmonitor=false",
+    "core.hooksPath=/dev/null",
+    "core.sparseCheckout=false",
+    "core.sparseCheckoutCone=false",
+    "diff.external=",
+    "filter.lfs.process=",
+    "filter.lfs.clean=cat",
+    "filter.lfs.smudge=cat",
+    "filter.fixtabswsp.process=",
+    "filter.fixtabswsp.clean=cat",
+    "filter.fixwsp.process=",
+    "filter.fixwsp.clean=cat",
+)
+
+
+def git_bytes(repository: Path, *args, timeout=120, _context=None):
+    context = _git_context(repository) if _context is None else _context
+    host_tool("git")
+    command = [HOST_TOOL_PINS["git"]["path"],
+               "--git-dir=" + str(context["git_dir"]),
+               "--work-tree=" + str(repository), "--no-pager"]
+    for setting in GIT_COMMAND_OVERRIDES:
+        command.extend(("-c", setting))
+    command.extend(args)
+    try:
+        return subprocess.check_output(command, stderr=subprocess.STDOUT,
+                                       env=hermetic_environment(git=True), timeout=timeout)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        output = getattr(error, "output", b"")
+        raise ProvenanceError(
+            f"Git operation failed for {repository}: {args!r}: {output[-512:]!r}") from error
+
+
+def nul_paths(data: bytes, label: str):
+    require(not data or data.endswith(b"\0"), f"Git returned malformed {label}")
+    result = []
+    for raw in data.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            value = raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ProvenanceError(f"Non-UTF-8 Git path in {label}") from error
+        result.append(safe_relative(value).as_posix())
+    return result
+
+
+def _parse_index(payload: bytes, label: str):
+    require(not payload or payload.endswith(b"\0"), f"Git returned malformed {label} index")
+    result = {}
+    for raw in payload.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            tag_raw, rest = raw.split(b" ", 1)
+            metadata, path_raw = rest.split(b"\t", 1)
+            mode_raw, oid_raw, stage_raw = metadata.split(b" ")
+            tag = tag_raw.decode("ascii")
+            mode = mode_raw.decode("ascii")
+            oid = oid_raw.decode("ascii")
+            stage = stage_raw.decode("ascii")
+            path = safe_relative(path_raw.decode("utf-8")).as_posix()
+        except (ValueError, UnicodeDecodeError) as error:
+            raise ProvenanceError(f"Malformed/non-UTF-8 Git index entry in {label}") from error
+        require(tag == "H", f"Git index has assume-unchanged/skip-worktree/sparse state: {label}/{path}")
+        require(stage == "0" and mode in {"100644", "100755", "120000", "160000"} and
+                GIT_SHA1.fullmatch(oid),
+                f"Git index has an unsupported stage/mode/object: {label}/{path}")
+        require(path not in result, f"Git index has duplicate path: {label}/{path}")
+        result[path] = (mode, oid)
+    return result
+
+
+def _parse_tree(payload: bytes, label: str):
+    require(not payload or payload.endswith(b"\0"), f"Git returned malformed {label} tree")
+    result = {}
+    for raw in payload.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            metadata, path_raw = raw.split(b"\t", 1)
+            mode_raw, type_raw, oid_raw = metadata.split(b" ")
+            mode = mode_raw.decode("ascii")
+            kind = type_raw.decode("ascii")
+            oid = oid_raw.decode("ascii")
+            path = safe_relative(path_raw.decode("utf-8")).as_posix()
+        except (ValueError, UnicodeDecodeError) as error:
+            raise ProvenanceError(f"Malformed/non-UTF-8 Git tree entry in {label}") from error
+        require(((kind == "blob" and mode in {"100644", "100755", "120000"}) or
+                 (kind == "commit" and mode == "160000")) and GIT_SHA1.fullmatch(oid),
+                f"Git tree contains an unsupported gitlink/type/mode: {label}/{path}")
+        require(path not in result, f"Git tree has duplicate path: {label}/{path}")
+        result[path] = (mode, oid)
+    return result
+
+
+def _worktree_blob(path: Path, expected_mode: str):
+    """Return raw Git-object and SHA-256 identities for one worktree entry."""
+    try:
+        before = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise ProvenanceError(f"Cannot stat tracked worktree path {path}: {error}") from error
+    if stat.S_ISLNK(before.st_mode):
+        try:
+            payload = os.readlink(os.fsencode(path))
+            after = path.lstat()
+        except OSError as error:
+            raise ProvenanceError(f"Cannot read tracked symlink {path}: {error}") from error
+        require((before.st_dev, before.st_ino, before.st_mode, before.st_mtime_ns,
+                 before.st_ctime_ns) ==
+                (after.st_dev, after.st_ino, after.st_mode, after.st_mtime_ns,
+                 after.st_ctime_ns), f"Tracked symlink changed during audit: {path}")
+        actual_mode = "120000"
+        size = len(payload)
+        git_digest = hashlib.sha1(b"blob " + str(size).encode() + b"\0" + payload).hexdigest()
+        return {"mode": actual_mode, "oid": git_digest,
+                "sha256": hashlib.sha256(payload).hexdigest(), "size": size}
+    if not stat.S_ISREG(before.st_mode):
+        return {"mode": "unsupported", "oid": "", "sha256": "", "size": 0}
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise ProvenanceError(f"Cannot open tracked worktree file {path}: {error}") from error
+    try:
+        opened = os.fstat(descriptor)
+        require((opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino) and
+                stat.S_ISREG(opened.st_mode), f"Tracked file was replaced while opening: {path}")
+        git_digest = hashlib.sha1(b"blob " + str(opened.st_size).encode() + b"\0")
+        sha256 = hashlib.sha256()
+        while True:
+            block = os.read(descriptor, 1024 * 1024)
+            if not block:
+                break
+            git_digest.update(block)
+            sha256.update(block)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        final = path.lstat()
+    except OSError as error:
+        raise ProvenanceError(f"Tracked file disappeared during audit: {path}") from error
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_size,
+                              value.st_mtime_ns, value.st_ctime_ns)
+    require(identity(opened) == identity(after) == identity(final),
+            f"Tracked file changed during raw-byte audit: {path}")
+    actual_mode = "100755" if stat.S_IMODE(opened.st_mode) & 0o111 else "100644"
+    require(not stat.S_IMODE(opened.st_mode) & 0o7000,
+            f"Tracked file has special permission bits: {path}")
+    return {"mode": actual_mode, "oid": git_digest.hexdigest(),
+            "sha256": sha256.hexdigest(), "size": opened.st_size}
+
+
+def _require_unpopulated_gitlink(repository: Path, relative: str):
+    """Accept only the non-input representation of an authenticated gitlink."""
+    path = repository / safe_relative(relative)
+    # Refuse a symlinked ancestor even when the final gitlink path is absent.
+    current = repository
+    for component in safe_relative(relative).parts[:-1]:
+        current = current / component
+        try:
+            metadata = current.lstat()
+        except FileNotFoundError:
+            return "absent"
+        except OSError as error:
+            raise ProvenanceError(f"Cannot stat gitlink ancestor {current}: {error}") from error
+        require(stat.S_ISDIR(metadata.st_mode),
+                f"Gitlink ancestor is not an ordinary directory: {current}")
+    try:
+        before = path.lstat()
+    except FileNotFoundError:
+        return "absent"
+    except OSError as error:
+        raise ProvenanceError(f"Cannot stat gitlink path {path}: {error}") from error
+    require(stat.S_ISDIR(before.st_mode),
+            f"Authenticated gitlink must remain absent or an empty directory: {path}")
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise ProvenanceError(f"Cannot open gitlink directory {path}: {error}") from error
+    try:
+        opened = os.fstat(descriptor)
+        require(stat.S_ISDIR(opened.st_mode) and
+                (opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino),
+                f"Gitlink directory was replaced while opening: {path}")
+        require(os.listdir(descriptor) == [],
+                f"Authenticated gitlink is materialized and may affect the build: {path}")
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        final = path.lstat()
+    except OSError as error:
+        raise ProvenanceError(f"Gitlink directory disappeared during audit: {path}") from error
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_mode,
+                              value.st_mtime_ns, value.st_ctime_ns)
+    require(identity(opened) == identity(after) == identity(final),
+            f"Gitlink directory changed during audit: {path}")
+    return "empty-directory"
+
+
+LFS_POINTER = re.compile(
+    rb"version https://git-lfs\.github\.com/spec/v1\n"
+    rb"oid sha256:([0-9a-f]{64})\nsize ([0-9]+)\n?\Z")
+
+
+def _valid_lfs_materialization(repository: Path, context, relative: str,
+                               expected_oid: str, actual) -> bool:
+    if actual is None or actual["mode"] not in {"100644", "100755"}:
+        return False
+    size_raw = git_bytes(repository, "cat-file", "-s", expected_oid,
+                         _context=context).decode("ascii").strip()
+    require(size_raw.isdigit(), f"Git returned invalid blob size for {relative}")
+    if int(size_raw) > 1024:
+        return False
+    pointer = git_bytes(repository, "cat-file", "blob", expected_oid, _context=context)
+    match = LFS_POINTER.fullmatch(pointer)
+    if match is None:
+        return False
+    attribute = git_bytes(repository, "check-attr", "--cached", "-z", "filter", "--", relative,
+                          _context=context)
+    expected_attribute = relative.encode() + b"\0filter\0lfs\0"
+    require(attribute == expected_attribute,
+            f"LFS-like pointer lacks an authenticated filter=lfs attribute: {relative}")
+    expected_size = int(match.group(2))
+    return actual["sha256"] == match.group(1).decode() and actual["size"] == expected_size
+
+
+def _cached_attributes(repository: Path, context, relative: str, names):
+    """Read only attributes authenticated by the repository index.
+
+    ``--cached`` is essential here: a modified working-tree .gitattributes
+    file must not be able to bless modified working-tree bytes.  The exact
+    NUL-delimited shape is checked as well, so a surprising Git result cannot
+    silently broaden the accepted conversion.
+    """
+    payload = git_bytes(repository, "check-attr", "--cached", "-z", *names,
+                        "--", relative, _context=context)
+    expected_path = relative.encode("utf-8")
+    fields = payload.split(b"\0")
+    require(fields and fields[-1] == b"", f"Git returned malformed attributes for {relative}")
+    fields.pop()
+    require(len(fields) == len(names) * 3,
+            f"Git returned an incomplete attribute set for {relative}")
+    result = {}
+    for offset, name in enumerate(names):
+        path_raw, name_raw, value_raw = fields[offset * 3:(offset + 1) * 3]
+        require(path_raw == expected_path and name_raw == name.encode("ascii"),
+                f"Git returned attributes for the wrong path/name: {relative}")
+        try:
+            value = value_raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ProvenanceError(
+                f"Git returned a non-UTF-8 attribute value for {relative}") from error
+        require(name not in result, f"Git returned a duplicate attribute for {relative}: {name}")
+        result[name] = value
+    return result
+
+
+def _safe_eol_text(blob: bytes) -> bool:
+    """Recognize the deliberately narrow text subset eligible for CRLF."""
+    if b"\r" in blob or b"\0" in blob:
+        return False
+    try:
+        text = blob.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    # Source text may contain tab, LF, form-feed and ANSI escape.  The latter
+    # is present as a literal colour sequence in Pigweed's authenticated
+    # bootstrap.bat.  Other C0 controls are not accepted merely because a
+    # pattern happens to label a blob as text.
+    return all(ord(character) >= 0x20 or character in "\t\n\f\x1b" for character in text)
+
+
+def _valid_eol_materialization(repository: Path, context, relative: str,
+                               expected_mode: str, expected_oid: str, actual):
+    """Return evidence for an exact authenticated LF-to-CRLF checkout.
+
+    This does not ask Git to filter the content.  Git is used only to read the
+    attributes from the already-authenticated index and the raw object named
+    by the authenticated HEAD tree.  The transformation is reproduced here
+    byte-for-byte and compared with the stable raw worktree hash.
+    """
+    if actual is None or actual["mode"] != expected_mode or expected_mode not in {
+            "100644", "100755"}:
+        return None
+    conversion = _cached_attributes(
+        repository, context, relative, ("text", "eol"))
+    if (conversion["text"] not in EOL_MATERIALIZATION_TEXT_VALUES or
+            conversion["eol"] != "crlf"):
+        return None
+    inert = _cached_attributes(
+        repository, context, relative, ("filter", "ident", "working-tree-encoding"))
+    require(inert["filter"] == "unspecified",
+            f"CRLF materialization has an external filter attribute: {relative}")
+    if inert != {"filter": "unspecified", "ident": "unspecified",
+                  "working-tree-encoding": "unspecified"}:
+        return None
+
+    blob = git_bytes(repository, "cat-file", "blob", expected_oid, _context=context)
+    object_oid = hashlib.sha1(
+        b"blob " + str(len(blob)).encode("ascii") + b"\0" + blob).hexdigest()
+    require(object_oid == expected_oid,
+            f"Git returned the wrong authenticated blob for {relative}")
+    if not _safe_eol_text(blob):
+        return None
+    converted = blob.replace(b"\n", b"\r\n")
+    converted_sha256 = hashlib.sha256(converted).hexdigest()
+    if actual["sha256"] != converted_sha256 or actual["size"] != len(converted):
+        return None
+    attributes = {**conversion, **inert}
+    return {
+        "mode": expected_mode,
+        "attributes": attributes,
+        "object": {
+            "oid": expected_oid,
+            "sha256": hashlib.sha256(blob).hexdigest(),
+            "size": len(blob),
+        },
+        "worktree": {"sha256": converted_sha256, "size": len(converted)},
+    }
+
+
+def _recheck_materialized_worktree(repository: Path, context, tree,
+                                   materialized_lfs, materialized_eol, label: str):
+    """Close the gap between recognizing and returning filtered worktree bytes."""
+    for relative, evidence in materialized_lfs.items():
+        expected_mode, expected_oid = tree[relative]
+        actual = _worktree_blob(repository / safe_relative(relative), expected_mode)
+        require(actual is not None and actual["mode"] == expected_mode and
+                _valid_lfs_materialization(
+                    repository, context, relative, expected_oid, actual) and
+                {"sha256": actual["sha256"], "size": actual["size"]} == evidence,
+                f"{label} materialized LFS path changed during source audit: {relative}")
+    for relative, evidence in materialized_eol.items():
+        expected_mode, expected_oid = tree[relative]
+        actual = _worktree_blob(repository / safe_relative(relative), expected_mode)
+        require(_valid_eol_materialization(
+                    repository, context, relative, expected_mode, expected_oid, actual) == evidence,
+                f"{label} materialized EOL path changed during source audit: {relative}")
+
+
+def project_state(source: Path, row, *, include_audit=False):
+    context = _project_git_context(source, row)
+    repository = context["repository"]
+    actual = git_bytes(repository, "rev-parse", "--verify", "HEAD", _context=context).decode().strip()
+    require(actual == row["revision"], f"{row['path']} HEAD differs from signed manifest")
+    require(not git_bytes(repository, "for-each-ref", "--format=%(refname)", "refs/replace",
+                          _context=context), f"{row['path']} has replacement refs")
+    index_payload = git_bytes(repository, "ls-files", "--stage", "-v", "-z", _context=context)
+    index = _parse_index(index_payload, row["path"])
+    tree = _parse_tree(git_bytes(repository, "ls-tree", "-r", "-z", "--full-tree", actual,
+                                 _context=context), row["path"])
+    require(index == tree, f"{row['path']} index differs from authenticated HEAD tree")
+    dirty = []
+    materialized_lfs = {}
+    materialized_eol = {}
+    gitlinks = {}
+    for relative, (expected_mode, expected_oid) in tree.items():
+        if expected_mode == "160000":
+            gitlinks[relative] = {
+                "mode": expected_mode,
+                "oid": expected_oid,
+                "state": _require_unpopulated_gitlink(repository, relative),
+            }
+            continue
+        worktree = _worktree_blob(repository / safe_relative(relative), expected_mode)
+        if worktree is not None and worktree["mode"] == expected_mode and worktree["oid"] == expected_oid:
+            continue
+        if (worktree is not None and worktree["mode"] == expected_mode and
+                _valid_lfs_materialization(repository, context, relative, expected_oid, worktree)):
+            materialized_lfs[relative] = {"sha256": worktree["sha256"], "size": worktree["size"]}
+            continue
+        eol = _valid_eol_materialization(
+            repository, context, relative, expected_mode, expected_oid, worktree)
+        if eol is not None:
+            materialized_eol[relative] = eol
+            continue
+        dirty.append(relative)
+    _recheck_materialized_worktree(
+        repository, context, tree, materialized_lfs, materialized_eol, row["path"])
+    for relative, evidence in gitlinks.items():
+        require(_require_unpopulated_gitlink(repository, relative) == evidence["state"],
+                f"{row['path']} gitlink representation changed during source audit: {relative}")
+    require(git_bytes(repository, "ls-files", "--stage", "-v", "-z", _context=context) == index_payload and
+            git_bytes(repository, "rev-parse", "--verify", "HEAD", _context=context).decode().strip() == actual,
+            f"{row['path']} Git index/HEAD changed during source audit")
+    require(_validate_git_config(context["git_dir"] / "config", project=row) == context["config"],
+            f"{row['path']} Git config changed during source audit")
+    base = (row["path"], dirty, list(tree))
+    if not include_audit:
+        return base
+    audit = dict(context["record"])
+    audit["gitlinks"] = dict(sorted(gitlinks.items()))
+    audit["materialized_lfs"] = dict(sorted(materialized_lfs.items()))
+    audit["materialized_eol"] = dict(sorted(materialized_eol.items()))
+    return (*base, audit)
+
+
+def clean_repository_audit(repository: Path, expected_revision: str, label: str):
+    """Authenticate a small repo-owned worktree excluded from the source walk."""
+    context = _git_context(repository)
+    actual = git_bytes(repository, "rev-parse", "--verify", "HEAD", _context=context).decode().strip()
+    require(actual == expected_revision, f"{label} HEAD differs from its lock")
+    require(not git_bytes(repository, "for-each-ref", "--format=%(refname)", "refs/replace",
+                          _context=context), f"{label} has replacement refs")
+    index_payload = git_bytes(repository, "ls-files", "--stage", "-v", "-z", _context=context)
+    index = _parse_index(index_payload, label)
+    tree = _parse_tree(git_bytes(repository, "ls-tree", "-r", "-z", "--full-tree", actual,
+                                 _context=context), label)
+    require(index == tree, f"{label} index differs from authenticated HEAD tree")
+    materialized_lfs = {}
+    materialized_eol = {}
+    gitlinks = {}
+    for relative, (expected_mode, expected_oid) in tree.items():
+        if expected_mode == "160000":
+            gitlinks[relative] = {
+                "mode": expected_mode,
+                "oid": expected_oid,
+                "state": _require_unpopulated_gitlink(repository, relative),
+            }
+            continue
+        worktree = _worktree_blob(repository / safe_relative(relative), expected_mode)
+        if worktree is not None and worktree["mode"] == expected_mode and worktree["oid"] == expected_oid:
+            continue
+        if (worktree is not None and worktree["mode"] == expected_mode and
+                _valid_lfs_materialization(repository, context, relative, expected_oid, worktree)):
+            materialized_lfs[relative] = {"sha256": worktree["sha256"], "size": worktree["size"]}
+            continue
+        eol = _valid_eol_materialization(
+            repository, context, relative, expected_mode, expected_oid, worktree)
+        if eol is not None:
+            materialized_eol[relative] = eol
+            continue
+        raise ProvenanceError(f"{label} raw worktree bytes differ: {relative}")
+
+    tracked = set(tree)
+    tracked_directories = {parent.as_posix() for name in tracked
+                           for parent in PurePosixPath(name).parents
+                           if parent != PurePosixPath(".")}
+    empty_gitlink_directories = {
+        name for name, evidence in gitlinks.items()
+        if evidence["state"] == "empty-directory"
+    }
+    ignored_runtime_cache = {}
+    cache_directories = {"__pycache__", "subcmds/__pycache__"} if label == "repo tool" else set()
+    for directory, directory_names, file_names in os.walk(repository, topdown=True, followlinks=False):
+        base = Path(directory)
+        if base == repository:
+            directory_names[:] = [name for name in directory_names if name != ".git"]
+        for name in [*directory_names, *file_names]:
+            path = base / name
+            relative = path.relative_to(repository).as_posix()
+            if name == ".git":
+                continue
+            mode = path.lstat().st_mode
+            if stat.S_ISDIR(mode):
+                require(relative in tracked_directories or relative in cache_directories or
+                        relative in empty_gitlink_directories,
+                        f"{label} contains an untracked directory: {relative}")
+            else:
+                if relative not in tracked:
+                    parent = PurePosixPath(relative).parent.as_posix()
+                    require(parent in cache_directories and relative.endswith(".pyc") and
+                            stat.S_ISREG(mode),
+                            f"{label} contains an untracked entry: {relative}")
+                    ignored_runtime_cache[relative] = file_ref(
+                        path, relative=PurePosixPath(relative), include_mode=True)
+
+    _recheck_materialized_worktree(
+        repository, context, tree, materialized_lfs, materialized_eol, label)
+    for relative, evidence in gitlinks.items():
+        require(_require_unpopulated_gitlink(repository, relative) == evidence["state"],
+                f"{label} gitlink representation changed during source audit: {relative}")
+    require(git_bytes(repository, "ls-files", "--stage", "-v", "-z", _context=context) == index_payload and
+            git_bytes(repository, "rev-parse", "--verify", "HEAD", _context=context).decode().strip() == actual,
+            f"{label} Git index/HEAD changed during source audit")
+    require(_validate_git_config(context["git_dir"] / "config") == context["config"],
+            f"{label} Git config changed during source audit")
+    return {
+        "config": context["config"],
+        "gitlinks": dict(sorted(gitlinks.items())),
+        "ignored_runtime_cache": dict(sorted(ignored_runtime_cache.items())),
+        "info_exclude": context["info_exclude"],
+        "materialized_eol": dict(sorted(materialized_eol.items())),
+        "materialized_lfs": dict(sorted(materialized_lfs.items())),
+    }
+
+
+def owned_targets(source: Path):
+    marker_path = source / "external/wonad/.wonad-stage.json"
+    marker = load_json(marker_path)
+    try:
+        result = stage_contract.marker_owned_targets(marker)
+    except ValueError as error:
+        raise ProvenanceError(str(error)) from error
+    result["packages/apps/Updater/res/values/config.xml"] = None
+    return result
+
+
+def forbidden_roots_absent(source: Path, allow_build_outputs=False):
+    for name in FORBIDDEN_BUILD_ROOTS:
+        if allow_build_outputs and name in {"out", "releases"}:
+            continue
+        path = source / name
+        if path.exists() or path.is_symlink():
+            if path.is_dir() and not path.is_symlink() and not any(path.iterdir()):
+                continue
+            raise ProvenanceError(f"Production source contains forbidden build/output root: {name}")
+
+
+def dedicated_source(source_value: Path) -> Path:
+    require(not source_value.is_symlink(), "GrapheneOS source path must not be a symlink")
+    source = source_value.resolve(strict=True)
+    repo_metadata = source / ".repo"
+    require(source != ROOT and ROOT not in source.parents and repo_metadata.is_dir() and
+            not repo_metadata.is_symlink() and
+            (repo_metadata / "projects").is_dir() and not (repo_metadata / "projects").is_symlink() and
+            (repo_metadata / "project-objects").is_dir() and
+            not (repo_metadata / "project-objects").is_symlink(),
+            "Use a dedicated canonical repo checkout outside Wonad")
+    return source
+
+
+def clean_vendor_cache(source_value: Path):
+    """Remove only regenerable adevtool inputs from the dedicated checkout.
+
+    The generated ``vendor/google_devices/frankel`` source is deliberately
+    retained.  Tracked placeholders below ``vendor/adevtool/dl`` are retained,
+    while downloaded archives, installed modules and dependency output are
+    deleted so they cannot become undeclared inputs to the source freeze.
+    """
+    source = dedicated_source(source_value)
+    adevtool = source / "vendor/adevtool"
+    require(adevtool.is_dir() and not adevtool.is_symlink() and
+            (adevtool / ".git").exists(), "Pinned vendor/adevtool checkout is missing")
+    removed = []
+
+    def remove_tree(path: Path, label: str):
+        if not path.exists() and not path.is_symlink():
+            return
+        require(not path.is_symlink() and path.is_dir(),
+                f"Refusing symlinked or non-directory vendor cache: {label}")
+        shutil.rmtree(path)
+        removed.append(label)
+
+    # These trees are wholly generated. None is an authenticated source input.
+    for relative in ("node_modules", ".cache", "cache", ".yarn", "lib", "dist"):
+        path = adevtool / relative
+        tracked = nul_paths(git_bytes(adevtool, "ls-files", "-z", "--", relative),
+                            f"adevtool {relative} tracked files")
+        require(not tracked, f"Refusing to remove tracked adevtool cache content: {relative}")
+        remove_tree(path, "vendor/adevtool/" + relative)
+    remove_tree(source / "out_adevtool_deps", "out_adevtool_deps")
+
+    # dl normally contains a tracked ignore marker. Remove every other entry
+    # bottom-up, without following links or touching any tracked file.
+    dl = adevtool / "dl"
+    tracked = set(nul_paths(git_bytes(adevtool, "ls-files", "-z", "--", "dl"),
+                            "adevtool dl tracked files"))
+    if dl.exists() or dl.is_symlink():
+        require(not dl.is_symlink() and dl.is_dir(),
+                "Refusing symlinked or non-directory vendor cache: vendor/adevtool/dl")
+        for directory, directory_names, file_names in os.walk(dl, topdown=False, followlinks=False):
+            base = Path(directory)
+            for name in [*file_names, *directory_names]:
+                path = base / name
+                relative = path.relative_to(adevtool).as_posix()
+                if relative in tracked or any(value.startswith(relative + "/") for value in tracked):
+                    continue
+                if path.is_dir() and not path.is_symlink():
+                    path.rmdir()
+                else:
+                    path.unlink()
+                removed.append("vendor/adevtool/" + relative.removeprefix("dl/")
+                               if relative.startswith("dl/") else "vendor/adevtool/" + relative)
+        for relative in tracked:
+            path = adevtool / safe_relative(relative)
+            require(path.is_file() and not path.is_symlink(),
+                    f"Tracked adevtool download marker differs: {relative}")
+    return sorted(removed)
+
+
+def scan_worktree(source: Path, projects, states, owned, manifest_materializations,
+                  allow_build_outputs=False):
+    """Return exact owned changes/generated files and reject every other extra."""
+    tracked = set()
+    changes = set()
+    for project_path, dirty, project_tracked in states:
+        tracked.update(f"{project_path}/{name}" for name in project_tracked)
+        changes.update(f"{project_path}/{name}" for name in dirty)
+    expected_changes = set(owned)
+    require(changes == expected_changes & tracked,
+            "Tracked worktree changes differ from the complete owned target set: "
+            f"unexpected={sorted(changes - expected_changes)[:8]} "
+            f"missing={sorted((expected_changes & tracked) - changes)[:8]}")
+
+    allowed_prefixes = tuple(root + "/" for root in GENERATED_ROOTS)
+    allowed_exact = set(GENERATED_FILES) | (expected_changes - tracked)
+    generated = {}
+    changed = {}
+
+    for directory, directory_names, file_names in os.walk(source, topdown=True, followlinks=False):
+        base = Path(directory)
+        relative_base = base.relative_to(source)
+        if relative_base == Path("."):
+            directory_names[:] = [name for name in directory_names if name != ".repo"]
+            if allow_build_outputs:
+                directory_names[:] = [name for name in directory_names if name not in {"out", "releases"}]
+        directory_names[:] = [name for name in directory_names if name != ".git"]
+        for name in [*directory_names, *file_names]:
+            path = base / name
+            relative = path.relative_to(source).as_posix()
+            if name == ".git":
+                continue
+            try:
+                mode = path.lstat().st_mode
+            except OSError as error:
+                raise ProvenanceError(f"Cannot stat source entry {relative}: {error}") from error
+            if stat.S_ISDIR(mode):
+                continue
+            if relative in manifest_materializations:
+                continue
+            if relative in tracked:
+                if relative in changes:
+                    require(stat.S_ISREG(mode), f"Owned tracked target is not ordinary: {relative}")
+                    changed[relative] = file_ref(path, relative=PurePosixPath(relative), include_mode=True)
+                continue
+            allowed = relative in allowed_exact or relative.startswith(allowed_prefixes)
+            require(allowed, f"Untracked or ignored source input is not owned: {relative}")
+            require(stat.S_ISREG(mode), f"Generated source input is not an ordinary file: {relative}")
+            generated[relative] = file_ref(path, relative=PurePosixPath(relative), include_mode=True)
+
+    require(set(changed) == changes, "Owned tracked changes disappeared during inventory")
+    require(set(expected_changes - tracked).issubset(generated),
+            "Owned untracked platform target is missing from inventory")
+    require(any(name.startswith("external/wonad/") for name in generated),
+            "Staged Wonad source is absent")
+    require(".wonad-updater-stage.json" in generated, "Updater ownership marker is absent")
+    require("vendor/google_devices/frankel/AndroidProducts.mk" in generated,
+            "Generated frankel vendor tree is absent")
+    require("vendor/google_devices/frankel/adevtool-version-check.mk" in generated,
+            "Generated frankel vendor tree lacks adevtool revision guard")
+    for relative, expected in owned.items():
+        if expected is None:
+            continue
+        row = changed.get(relative) or generated.get(relative)
+        require(row is not None and row["sha256"] == expected,
+                f"Owned platform target differs from stage marker: {relative}")
+    return dict(sorted(changed.items())), dict(sorted(generated.items()))
+
+
+def collect_source(source_value: Path, builder_record_path: Path, lock_path: Path, jobs: int,
+                   allow_build_outputs=False):
+    require(1 <= jobs <= 72, "Jobs must be between 1 and 72")
+    tools = host_tool_ledger()
+    source = dedicated_source(source_value)
+    forbidden_roots_absent(source, allow_build_outputs)
+    lock = validate_lock(load_json(lock_path))
+    default_manifest = source / ".repo/manifests/default.xml"
+    default_ref = file_ref(default_manifest)
+    require(default_ref == {"sha256": lock["manifest"]["default_xml_sha256"],
+                            "size": lock["manifest"]["default_xml_size"]},
+            "Checked-out default.xml differs from the authenticated lock")
+    manifest_repository = source / ".repo/manifests"
+    manifest_head = git_bytes(manifest_repository, "rev-parse", "HEAD").decode().strip()
+    require(manifest_head == lock["manifest"]["commit"], "Manifest repository HEAD differs from lock")
+    committed_manifest = git_bytes(manifest_repository, "show", manifest_head + ":default.xml")
+    require(hashlib.sha256(committed_manifest).hexdigest() == default_ref["sha256"] and
+            len(committed_manifest) == default_ref["size"],
+            "Working default.xml differs from its authenticated manifest commit")
+    manifest_git = clean_repository_audit(
+        manifest_repository, lock["manifest"]["commit"], "manifest repository")
+    require(not (source / ".repo/local_manifests").exists(), "Local manifest overrides are forbidden")
+    projects = _parse_manifest_payload(committed_manifest)[1]
+    project_list = source / ".repo/project.list"
+    require(project_list.is_file() and not project_list.is_symlink(), "repo project.list is missing")
+    listed = project_list.read_text().splitlines()
+    require(len(listed) == len(set(listed)) and all(safe_relative(value) for value in listed),
+            "repo project.list contains invalid/duplicate paths")
+    project_paths = [row["path"] for row in projects]
+    require(set(listed) == set(project_paths), "repo project.list differs from signed default.xml")
+
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        audited_states = list(pool.map(lambda row: project_state(source, row, include_audit=True), projects))
+    states = [state[:3] for state in audited_states]
+    project_git = {state[0]: state[3] for state in audited_states}
+    owned = owned_targets(source)
+    manifest_materializations = manifest_checkout_materializations(
+        source, committed_manifest, projects, states)
+    changed, generated = scan_worktree(
+        source, projects, states, owned, manifest_materializations, allow_build_outputs)
+    require(manifest_checkout_materializations(
+                source, committed_manifest, projects, states) ==
+            manifest_materializations,
+            "Manifest checkout materializations changed during source audit")
+    require(file_ref(default_manifest) == default_ref and
+            git_bytes(manifest_repository, "show", manifest_head + ":default.xml") ==
+            committed_manifest,
+            "Authenticated manifest changed during source audit")
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        final_audited_states = list(pool.map(
+            lambda row: project_state(source, row, include_audit=True), projects))
+    require(final_audited_states == audited_states,
+            "Project worktrees changed during source audit")
+
+    repo = source / ".repo/repo"
+    repo_head = git_bytes(repo, "rev-parse", "HEAD").decode().strip()
+    require(repo_head == lock["repo_tool"]["commit"], "repo tool revision differs from lock")
+    repo_git = clean_repository_audit(repo, lock["repo_tool"]["commit"], "repo tool")
+    repo_launcher = file_ref(repo / "repo", include_mode=True)
+    toolchain = [row for row in projects if
+                 row["path"].startswith(("prebuilts/", "kernel/prebuilts/", "toolchain/", "build/"))]
+    require(toolchain, "Manifest has no Android build/toolchain projects")
+    builder = validate_builder(load_json(builder_record_path), lock)
+    ledger = [{key: row[key] for key in ("path", "name", "revision", "remote")} for row in projects]
+    result = {
+        "schema": SOURCE_SCHEMA,
+        "kind": "wonad-grapheneos-source-provenance",
+        "targets": {"release": lock["release"], "production": PRODUCTION_TARGET,
+                    "source_matched_emulator": EMULATOR_TARGET},
+        "artifact_claim": "source_freeze_only_no_binary_artifacts",
+        "lock": file_ref(lock_path),
+        "manifest": {
+            "commit": manifest_head,
+            "tag_object": lock["manifest"]["tag_object"],
+            "default_xml": default_ref,
+            "projects": ledger,
+            "project_count": len(ledger),
+            "project_ledger_sha256": canonical_digest(ledger),
+        },
+        "repo_tool": {"revision": lock["repo_tool"]["revision"], "commit": repo_head,
+                      "launcher": repo_launcher},
+        "owned_tracked_changes": changed,
+        "generated_inputs": generated,
+        "generated_inputs_sha256": canonical_digest(generated),
+        "toolchain_projects": toolchain,
+        "toolchain_ledger_sha256": canonical_digest(toolchain),
+        "source_audit": {
+            "policy": GIT_RAW_AUDIT_POLICY,
+            "host_tools": tools,
+            "manifest_git": manifest_git,
+            "repo_git": repo_git,
+            "projects": dict(sorted(project_git.items())),
+            "projects_sha256": canonical_digest(dict(sorted(project_git.items()))),
+        },
+        "builder": builder,
+        "generator": file_ref(Path(__file__)),
+    }
+    require(host_tool_ledger() == tools, "Pinned host tools changed during source audit")
+    return result
+
+
+def validate_worktree_materializations(value, *, label="source audit"):
+    """Validate the complete build-visible representation ledger for one Git tree.
+
+    The authenticated tree fixes each underlying object, but Git-LFS, checkout
+    EOL conversion and an unpopulated gitlink can still give that tree more than
+    one build-visible worktree representation.  Consumers which compare builds
+    must bind all three ledgers, including empty ledgers, rather than treating
+    the manifest revision alone as a byte-for-byte source snapshot.
+    """
+    require(isinstance(value, dict) and set(value) == {
+                "gitlinks", "materialized_eol", "materialized_lfs"
+            }, f"{label} materialization ledger has unexpected fields")
+
+    lfs = value["materialized_lfs"]
+    require(isinstance(lfs, dict), f"{label} LFS ledger is invalid")
+    for name, row in lfs.items():
+        require(safe_relative(name) and isinstance(row, dict) and
+                set(row) == {"sha256", "size"} and
+                SHA256.fullmatch(str(row.get("sha256", ""))) and
+                type(row.get("size")) is int and row["size"] >= 0,
+                f"Invalid materialized LFS row ({label}): {name}")
+
+    eol = value["materialized_eol"]
+    require(isinstance(eol, dict), f"{label} EOL ledger is invalid")
+    for name, row in eol.items():
+        require(safe_relative(name) and isinstance(row, dict) and set(row) == {
+                    "mode", "attributes", "object", "worktree"} and
+                row["mode"] in {"100644", "100755"} and
+                isinstance(row["attributes"], dict) and
+                set(row["attributes"]) == {
+                    "text", "eol", "filter", "ident", "working-tree-encoding"} and
+                row["attributes"]["text"] in EOL_MATERIALIZATION_TEXT_VALUES and
+                {attribute: row["attributes"][attribute]
+                 for attribute in EOL_MATERIALIZATION_INERT_ATTRIBUTES} ==
+                EOL_MATERIALIZATION_INERT_ATTRIBUTES,
+                f"Invalid materialized EOL row ({label}): {name}")
+        object_identity = row["object"]
+        worktree_identity = row["worktree"]
+        require(isinstance(object_identity, dict) and set(object_identity) == {
+                    "oid", "sha256", "size"} and
+                GIT_SHA1.fullmatch(str(object_identity.get("oid", ""))) and
+                SHA256.fullmatch(str(object_identity.get("sha256", ""))) and
+                type(object_identity.get("size")) is int and
+                object_identity["size"] >= 0 and
+                isinstance(worktree_identity, dict) and set(worktree_identity) == {
+                    "sha256", "size"} and
+                SHA256.fullmatch(str(worktree_identity.get("sha256", ""))) and
+                type(worktree_identity.get("size")) is int and
+                worktree_identity["size"] >= object_identity["size"],
+                f"Invalid materialized EOL identities ({label}): {name}")
+
+    gitlinks = value["gitlinks"]
+    require(isinstance(gitlinks, dict), f"{label} gitlink ledger is invalid")
+    for name, row in gitlinks.items():
+        require(safe_relative(name) and isinstance(row, dict) and set(row) == {
+                    "mode", "oid", "state"} and
+                row["mode"] == "160000" and
+                GIT_SHA1.fullmatch(str(row["oid"])) and
+                row["state"] in {"absent", "empty-directory"},
+                f"Invalid gitlink row ({label}): {name}")
+
+    require(not ((set(eol) & set(lfs)) or (set(eol) & set(gitlinks)) or
+                 (set(lfs) & set(gitlinks))),
+            f"{label} paths have conflicting worktree representations")
+    return value
+
+
+def validate_source_record_shape(record):
+    require(isinstance(record, dict) and set(record) == {
+        "schema", "kind", "targets", "artifact_claim", "lock", "manifest", "repo_tool",
+        "owned_tracked_changes", "generated_inputs", "generated_inputs_sha256",
+        "toolchain_projects", "toolchain_ledger_sha256", "source_audit", "builder", "generator"
+    }, "Unexpected source provenance fields")
+    require(record["schema"] == SOURCE_SCHEMA and
+            record["kind"] == "wonad-grapheneos-source-provenance",
+            "Unsupported source provenance")
+    require(record["targets"] == {"release": "2026100600", "production": PRODUCTION_TARGET,
+                                   "source_matched_emulator": EMULATOR_TARGET} and
+            record["artifact_claim"] == "source_freeze_only_no_binary_artifacts",
+            "Source provenance targets differ")
+    manifest = record["manifest"]
+    require(isinstance(manifest, dict) and set(manifest) == {
+                "commit", "tag_object", "default_xml", "projects", "project_count",
+                "project_ledger_sha256"} and
+            GIT_SHA1.fullmatch(str(manifest.get("commit", ""))) and
+            GIT_SHA1.fullmatch(str(manifest.get("tag_object", ""))) and
+            manifest.get("project_count") == len(manifest.get("projects", [])) and
+            manifest.get("project_count", 0) > 0 and
+            manifest.get("project_ledger_sha256") == canonical_digest(manifest.get("projects")),
+            "Source project ledger is inconsistent")
+    require(isinstance(record["lock"], dict) and set(record["lock"]) == {"sha256", "size"} and
+            SHA256.fullmatch(str(record["lock"].get("sha256", ""))) and
+            type(record["lock"].get("size")) is int and record["lock"]["size"] > 0,
+            "Source lock identity is invalid")
+    for row in manifest["projects"]:
+        require(isinstance(row, dict) and set(row) == {"path", "name", "revision", "remote"} and
+                safe_relative(row["path"]) and isinstance(row["name"], str) and row["name"] and
+                GIT_SHA1.fullmatch(str(row["revision"])) and
+                (row["remote"] is None or isinstance(row["remote"], str)),
+                "Source project ledger contains an invalid row")
+    require(len({row["path"] for row in manifest["projects"]}) == manifest["project_count"],
+            "Source project ledger contains duplicate paths")
+    for ledger_name in ("owned_tracked_changes", "generated_inputs"):
+        ledger = record[ledger_name]
+        require(isinstance(ledger, dict) and ledger, f"{ledger_name} is empty or invalid")
+        for name, row in ledger.items():
+            relative = safe_relative(name)
+            require(not private_key_like(relative) and isinstance(row, dict) and
+                    set(row) == {"sha256", "size", "mode"} and
+                    SHA256.fullmatch(str(row.get("sha256", ""))) and
+                    type(row.get("size")) is int and row["size"] >= 0 and
+                    type(row.get("mode")) is int and 0 <= row["mode"] <= 0o7777,
+                    f"Invalid {ledger_name} row: {name}")
+    require(record["generated_inputs_sha256"] == canonical_digest(record["generated_inputs"]),
+            "Generated input ledger is inconsistent")
+    require(record["toolchain_ledger_sha256"] == canonical_digest(record["toolchain_projects"]),
+            "Toolchain project ledger is inconsistent")
+
+    def valid_file_reference(value, *, mode=True):
+        fields = {"sha256", "size", "mode"} if mode else {"sha256", "size"}
+        return (isinstance(value, dict) and set(value) == fields and
+                SHA256.fullmatch(str(value.get("sha256", ""))) and
+                type(value.get("size")) is int and value["size"] >= 0 and
+                (not mode or (type(value.get("mode")) is int and 0 <= value["mode"] <= 0o7777)))
+
+    def valid_git_metadata(value, *, project=False, runtime_cache=False):
+        expected_fields = {
+            "config", "gitlinks", "info_exclude", "materialized_eol", "materialized_lfs"
+        }
+        if project:
+            expected_fields |= {"gitdir", "object_store"}
+        if runtime_cache:
+            expected_fields.add("ignored_runtime_cache")
+        require(isinstance(value, dict) and set(value) == expected_fields,
+                "Source audit Git metadata has unexpected fields")
+        config = value["config"]
+        require(isinstance(config, dict) and set(config) == {"file", "entries_sha256"} and
+                valid_file_reference(config["file"]) and
+                SHA256.fullmatch(str(config["entries_sha256"])),
+                "Source audit Git config identity is invalid")
+        require(valid_file_reference(value["info_exclude"]),
+                "Source audit Git exclude identity is invalid")
+        validate_worktree_materializations({
+            "gitlinks": value["gitlinks"],
+            "materialized_eol": value["materialized_eol"],
+            "materialized_lfs": value["materialized_lfs"],
+        })
+        if project:
+            require(safe_relative(value["gitdir"]) and safe_relative(value["object_store"]),
+                    "Source audit project Git paths are invalid")
+        if runtime_cache:
+            cache = value["ignored_runtime_cache"]
+            require(isinstance(cache, dict) and
+                    all(safe_relative(name) and valid_file_reference(row)
+                        for name, row in cache.items()),
+                    "Source audit repo runtime-cache ledger is invalid")
+
+    source_audit = record["source_audit"]
+    require(isinstance(source_audit, dict) and set(source_audit) == {
+                "policy", "host_tools", "manifest_git", "repo_git", "projects", "projects_sha256"
+            } and source_audit["policy"] == GIT_RAW_AUDIT_POLICY and
+            source_audit["host_tools"] == expected_host_tool_ledger(),
+            "Source audit policy or pinned host-tool ledger differs")
+    valid_git_metadata(source_audit["manifest_git"], runtime_cache=True)
+    valid_git_metadata(source_audit["repo_git"], runtime_cache=True)
+    project_metadata = source_audit["projects"]
+    require(isinstance(project_metadata, dict) and
+            set(project_metadata) == {row["path"] for row in manifest["projects"]} and
+            source_audit["projects_sha256"] == canonical_digest(project_metadata),
+            "Source audit project metadata ledger is inconsistent")
+    for path, value in project_metadata.items():
+        safe_relative(path)
+        valid_git_metadata(value, project=True)
+    require(isinstance(record["generator"], dict) and set(record["generator"]) == {"sha256", "size"} and
+            SHA256.fullmatch(str(record["generator"].get("sha256", ""))) and
+            type(record["generator"].get("size")) is int and record["generator"]["size"] > 0,
+            "Source provenance generator identity is invalid")
+    builder = record["builder"]
+    require(isinstance(builder, dict) and builder.get("schema") == BUILDER_SCHEMA and
+            builder.get("kind") == "wonad-phase1-builder" and
+            builder.get("identity_sha256") == canonical_digest(builder.get("image")) and
+            IMAGE_DIGEST.fullmatch(str(builder.get("image", {}).get("id", ""))) and
+            SHA256.fullmatch(str(builder.get("dockerfile", {}).get("sha256", ""))),
+            "Embedded builder identity is invalid")
+    return record
+
+
+def verify_source(source, record_path, builder_record, lock_path, jobs, allow_build_outputs=False):
+    expected = validate_source_record_shape(load_json(record_path))
+    actual = collect_source(source, builder_record, lock_path, jobs, allow_build_outputs)
+    require(actual == expected, "Source/builder provenance differs from the immutable record")
+    return expected
+
+
+def public_certificate(path: Path):
+    relative = PurePosixPath(path.name)
+    require(not private_key_like(relative), "Signer input has a private-key-like name")
+    reference = file_ref(path, reject_private_content=True)
+    openssl = host_tool("openssl")
+    command = HOST_TOOL_PINS["openssl"]["path"]
+    try:
+        der = subprocess.run([command, "x509", "-in", str(path), "-outform", "DER"],
+                             check=True, capture_output=True, timeout=30,
+                             env=hermetic_environment(openssl=True)).stdout
+        subject = subprocess.run([command, "x509", "-in", str(path), "-noout", "-subject"],
+                                 check=True, capture_output=True, text=True, timeout=30,
+                                 env=hermetic_environment(openssl=True)).stdout.strip()
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise ProvenanceError("Signer input is not a public X.509 certificate") from error
+    require(128 <= len(der) <= 65536, "Signer certificate DER size differs")
+    require(_host_tool_uncached("openssl") == openssl,
+            "Pinned OpenSSL changed during certificate parsing")
+    return {"file": reference, "der_sha256": hashlib.sha256(der).hexdigest(),
+            "der_size": len(der), "subject": subject}
+
+
+def assert_distinct_os_signers(signer_certificate: Path, os_certificates: list[Path]):
+    """Reject reuse of any GrapheneOS signing identity for the Wonad APK.
+
+    The API contract gives the OS a dedicated Wonad certificate pin.  Sharing
+    that identity with platform, releasekey, or another OS role would turn the
+    intended privilege boundary into an alias.  Compare canonical DER bytes,
+    rather than PEM text, and inspect public certificates only.
+    """
+    require(os_certificates, "At least one OS signing certificate is required")
+    wonad = public_certificate(signer_certificate)
+    seen = set()
+    for certificate in os_certificates:
+        resolved = certificate.resolve(strict=True)
+        require(resolved not in seen, f"Duplicate OS certificate input: {certificate}")
+        seen.add(resolved)
+        identity = public_certificate(certificate)
+        require(identity["der_sha256"] != wonad["der_sha256"],
+                f"Wonad signer must be distinct from GrapheneOS signer: {certificate.name}")
+    return {"wonad_certificate_sha256": wonad["der_sha256"],
+            "os_certificate_count": len(os_certificates)}
+
+
+def tool_ref(path: Path):
+    resolved = path.resolve(strict=True)
+    return {"invoked_as": str(path), "resolved": file_ref(resolved)}
+
+
+def apk_signer(apksigner: Path, apk: Path):
+    """Verify the current APK signer and inventory any proof-of-rotation.
+
+    ``apksigner verify --print-certs`` reports only the current accepted
+    signer certificates. In particular, a v3 proof-of-rotation with several
+    historical certificates still reports ``Number of signers: 1``. Query
+    the APK as a SigningCertificateLineage separately so production evidence
+    can prove that no historical signer remains trusted.
+    """
+    output = checked_output([str(apksigner), "verify", "--verbose", "--print-certs", str(apk)],
+                            timeout=120, env=hermetic_environment())
+    signers = re.findall(r"^Signer #([0-9]+) certificate SHA-256 digest: ([0-9a-fA-F]{64})$",
+                         output, re.MULTILINE)
+    require(signers == [("1", signers[0][1])] if signers else False,
+            "Conformance APK must have exactly one signer")
+    schemes = {}
+    for version in (1, 2, 3, 3.1, 4):
+        match = re.search(rf"^Verified using v{re.escape(str(version))} scheme.*: (true|false)$",
+                          output, re.MULTILINE)
+        if match:
+            schemes[str(version)] = match.group(1) == "true"
+    require(schemes.get("2") or schemes.get("3") or schemes.get("3.1"),
+            "Conformance APK lacks a verified modern signing scheme")
+
+    lineage_command = [str(apksigner), "lineage", "--in", str(apk), "--print-certs"]
+    try:
+        lineage_result = subprocess.run(
+            lineage_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=120, env=hermetic_environment())
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ProvenanceError(
+            f"Cannot inspect conformance APK signing-certificate lineage: {error}") from error
+    lineage_output = lineage_result.stdout.strip()
+    if lineage_result.returncode == 0:
+        lineage = re.findall(
+            r"^Signer #([0-9]+) in lineage certificate SHA-256 digest: "
+            r"([0-9a-fA-F]{64})$", lineage_output, re.MULTILINE)
+        require(lineage and [row[0] for row in lineage] ==
+                [str(index) for index in range(1, len(lineage) + 1)],
+                "Conformance APK lineage output is malformed")
+        require(len({digest.lower() for _, digest in lineage}) == len(lineage),
+                "Conformance APK lineage repeats a signing certificate")
+        lineage_digests = [digest.lower() for _, digest in lineage]
+    else:
+        no_lineage_diagnostics = {
+            "The provided APK does not contain a valid lineage.",
+            "The provided APK does not contain a valid V3 nor V3.1 signature block.",
+        }
+        require(lineage_result.returncode == 1 and
+                lineage_output in no_lineage_diagnostics,
+                "Cannot prove absence of conformance APK signing-certificate lineage")
+        lineage_digests = []
+    return {
+        "certificate_sha256": signers[0][1].lower(),
+        "lineage_certificate_sha256": lineage_digests,
+        "schemes": schemes,
+        "signers": 1,
+    }
+
+
+def safe_apk_entries(path: Path, label: str):
+    try:
+        archive = zipfile.ZipFile(path)
+    except (OSError, zipfile.BadZipFile) as error:
+        raise ProvenanceError(f"Invalid {label}: {error}") from error
+    result = {}
+    with archive:
+        infos = archive.infolist()
+        require(len(infos) == len({row.filename for row in infos}) and len(infos) <= 4096,
+                f"{label} has duplicate or excessive entries")
+        for row in infos:
+            name = safe_relative(row.filename.rstrip("/")).as_posix()
+            require(not row.is_dir() and row.file_size <= 256 * 1024 * 1024,
+                    f"{label} contains a directory/oversized entry: {name}")
+            mode = (row.external_attr >> 16) & 0o177777
+            require(stat.S_IFMT(mode) in (0, stat.S_IFREG), f"{label} contains non-regular entry: {name}")
+            data = archive.read(row)
+            result[name] = {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+    return result
+
+
+def signature_entry(name: str) -> bool:
+    upper = name.upper()
+    return upper == "META-INF/MANIFEST.MF" or (
+        upper.startswith("META-INF/") and upper.endswith((".SF", ".RSA", ".DSA", ".EC")))
+
+
+def validate_frozen_compile(receipt_path: Path, sdk_repository: Path):
+    receipt = load_json(receipt_path)
+    require(receipt.get("schema") == 1 and receipt.get("api") == 3 and
+            receipt.get("status") == "current_source_compile_qualified_not_runtime" and
+            receipt.get("source_bytes_before_after_verified") is True,
+            "Conformance source receipt is not a fresh verified API-v3 compile")
+    conformance = receipt.get("conformance_artifact")
+    require(isinstance(conformance, dict) and conformance.get("package") == "org.wonad.desktop" and
+            conformance.get("signed") is False and conformance.get("native_code") is False and
+            conformance.get("privileged") is False and conformance.get("test_only") is False and
+            SHA256.fullmatch(str(conformance.get("sha256", ""))) and
+            type(conformance.get("bytes")) is int,
+            "Compile receipt lacks the policy-free unsigned conformance APK")
+    build = receipt.get("build")
+    require(isinstance(build, dict) and all(build.get(name) == 0 for name in
+            ("failures", "errors", "skipped", "lint_errors")), "Conformance compile/test/lint did not pass")
+    base = receipt_path.parent
+    unsigned = base / "conformance-unsigned.apk"
+    require(file_ref(unsigned) == {"sha256": conformance["sha256"], "size": conformance["bytes"]},
+            "Unsigned conformance APK differs from compile receipt")
+    freeze_path = base / "source-freeze.json"
+    freeze = load_json(freeze_path)
+    require(freeze.get("schema") == 1 and
+            freeze.get("kind") == "fresh_current_native_api3_desktop_source_v1" and
+            isinstance(freeze.get("files"), dict) and freeze["files"],
+            "Conformance source freeze differs")
+    frozen_root = base / "source"
+    for name, row in freeze["files"].items():
+        relative = safe_relative(name)
+        require(isinstance(row, dict) and set(row) == {"sha256", "bytes"} and
+                SHA256.fullmatch(str(row["sha256"])) and type(row["bytes"]) is int,
+                f"Invalid frozen source row: {name}")
+        actual = file_ref(frozen_root / relative)
+        require(actual == {"sha256": row["sha256"], "size": row["bytes"]},
+                f"Frozen conformance/SDK source differs: {name}")
+    source_reference = receipt.get("source")
+    require(isinstance(source_reference, dict) and
+            file_ref(freeze_path) == {"sha256": source_reference.get("sha256"),
+                                      "size": source_reference.get("bytes")},
+            "Source freeze identity differs from build receipt")
+    return receipt, freeze, unsigned, frozen_root / "android"
+
+
+def sdk_inventory(repository: Path):
+    require(repository.is_dir() and not repository.is_symlink(), "SDK publication must be an ordinary directory")
+    result = {}
+    for directory, directory_names, file_names in os.walk(repository, followlinks=False):
+        base = Path(directory)
+        for name in directory_names:
+            require(not (base / name).is_symlink(), "SDK publication contains a symlink directory")
+        for name in file_names:
+            path = base / name
+            relative = safe_relative(path.relative_to(repository).as_posix())
+            result[relative.as_posix()] = file_ref(path, relative=relative, include_mode=True)
+    require(result, "SDK publication is empty")
+    return dict(sorted(result.items()))
+
+
+def import_sdk_verifier():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("phase1_sdk_verifier", SDK_VERIFIER)
+    require(spec is not None and spec.loader is not None, "Cannot load SDK verifier")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def collect_clients(sdk_repository: Path, conformance_apk: Path, source_receipt: Path,
+                    certificate: Path, apksigner: Path, qualification: str):
+    require(qualification in {"production", "development"}, "Explicit client qualification is required")
+    host_tools = host_tool_ledger()
+    compile_receipt, freeze, unsigned, frozen_android = validate_frozen_compile(source_receipt, sdk_repository)
+    verifier = import_sdk_verifier()
+    try:
+        sdk_result = verifier.verify_repository(sdk_repository, frozen_android)
+    except Exception as error:
+        raise ProvenanceError(f"Frozen SDK publication verification failed: {error}") from error
+    publication_files = sdk_inventory(sdk_repository)
+    expected_sdk = compile_receipt.get("sdk_publication")
+    legacy_files = {name: {"sha256": row["sha256"], "bytes": row["size"]}
+                    for name, row in publication_files.items()}
+    require(isinstance(expected_sdk, dict) and expected_sdk.get("result") == sdk_result and
+            expected_sdk.get("files") == legacy_files,
+            "SDK publication differs from the fresh compile receipt")
+
+    certificate_record = public_certificate(certificate)
+    if qualification == "production":
+        lowered = certificate_record["subject"].lower()
+        require(not any(word in lowered for word in ("debug", "development", "testkey", "test only")),
+                "Development/test certificate cannot produce production client provenance")
+    signer = apk_signer(apksigner, conformance_apk)
+    require(signer["certificate_sha256"] == certificate_record["der_sha256"],
+            "Conformance APK signer differs from selected public certificate")
+    if qualification == "production":
+        require(not signer["lineage_certificate_sha256"],
+                "Production conformance APK must not contain signing-certificate lineage/history")
+    unsigned_entries = safe_apk_entries(unsigned, "unsigned conformance APK")
+    signed_entries = safe_apk_entries(conformance_apk, "signed conformance APK")
+    signed_payload = {name: row for name, row in signed_entries.items() if not signature_entry(name)}
+    unsigned_payload = {name: row for name, row in unsigned_entries.items() if not signature_entry(name)}
+    require(signed_payload == unsigned_payload,
+            "Signed conformance APK payload differs from the receipted unsigned APK")
+    require(not any(name.endswith(".so") for name in signed_payload),
+            "Conformance APK unexpectedly contains native code")
+    require("AndroidManifest.xml" in signed_payload and "classes.dex" in signed_payload,
+            "Conformance APK lacks manifest or code")
+
+    result = {
+        "schema": CLIENT_SCHEMA,
+        "kind": "wonad-phase1-client-provenance",
+        "qualification": qualification,
+        "coordinate": "org.wonad:desktop-sdk:3.0.1",
+        "sdk_publication": {"verification": sdk_result, "files": publication_files},
+        "conformance": {
+            "package": "org.wonad.desktop",
+            "apk": file_ref(conformance_apk),
+            "unsigned_apk": file_ref(unsigned),
+            "signing": signer,
+            "payload_sha256": canonical_digest(signed_payload),
+        },
+        "public_signer": certificate_record,
+        "source_receipt": file_ref(source_receipt),
+        "source_freeze": {"identity": file_ref(source_receipt.parent / "source-freeze.json"),
+                          "files": freeze["files"], "files_sha256": canonical_digest(freeze["files"])},
+        "tools": {"generator": file_ref(Path(__file__)), "sdk_verifier": file_ref(SDK_VERIFIER),
+                  "apksigner": tool_ref(apksigner), "host_tools": host_tools},
+    }
+    require(host_tool_ledger() == host_tools, "Pinned host tools changed during client audit")
+    return result
+
+
+def validate_clients_shape(record):
+    require(isinstance(record, dict) and set(record) == {
+        "schema", "kind", "qualification", "coordinate", "sdk_publication", "conformance",
+        "public_signer", "source_receipt", "source_freeze", "tools"
+    }, "Unexpected client provenance fields")
+    require(record["schema"] == CLIENT_SCHEMA and record["kind"] == "wonad-phase1-client-provenance" and
+            record["qualification"] in {"production", "development"} and
+            record["coordinate"] == "org.wonad:desktop-sdk:3.0.1",
+            "Unsupported client provenance")
+    require(record["source_freeze"].get("files_sha256") ==
+            canonical_digest(record["source_freeze"].get("files")), "Client source ledger is inconsistent")
+    require(isinstance(record["tools"], dict) and set(record["tools"]) == {
+                "generator", "sdk_verifier", "apksigner", "host_tools"
+            } and record["tools"]["host_tools"] == expected_host_tool_ledger(),
+            "Client provenance host-tool ledger differs")
+    require(record["conformance"].get("signing", {}).get("certificate_sha256") ==
+            record["public_signer"].get("der_sha256"), "Client signer identities differ")
+    publication = record["sdk_publication"]
+    require(isinstance(publication, dict) and set(publication) == {"verification", "files"} and
+            isinstance(publication["files"], dict) and publication["files"],
+            "Client SDK publication identity is invalid")
+    verification = publication["verification"]
+    member_modes = {
+        "API-v3.md": 0o644,
+        "desktop-sdk-contract-v3.json": 0o644,
+        "verify-desktop-sdk-contract.py": 0o755,
+    }
+    members = verification.get("contract_members") if isinstance(verification, dict) else None
+    require(isinstance(verification, dict) and
+            verification.get("coordinate") == "org.wonad:desktop-sdk:3.0.1" and
+            verification.get("contract_signature") ==
+                "db6ac649c34d8c25ab0bdd4a46802639deb3972d376070c6c3cdd811d7962fff" and
+            isinstance(members, dict) and set(members) == set(member_modes) and
+            all(isinstance(row, dict) and set(row) == {"sha256", "bytes", "mode"} and
+                type(row.get("sha256")) is str and SHA256.fullmatch(row["sha256"]) and
+                type(row.get("bytes")) is int and row["bytes"] > 0 and
+                type(row.get("mode")) is int and row["mode"] == member_modes[name]
+                for name, row in members.items()),
+            "Client SDK verification or normative contract-member identity is invalid")
+    for name, row in publication["files"].items():
+        relative = safe_relative(name)
+        require(not private_key_like(relative) and isinstance(row, dict) and
+                set(row) == {"sha256", "size", "mode"} and
+                SHA256.fullmatch(str(row.get("sha256", ""))) and
+                type(row.get("size")) is int and row["size"] >= 0,
+                f"Invalid client SDK row: {name}")
+    for field in ("apk", "unsigned_apk"):
+        row = record["conformance"].get(field)
+        require(isinstance(row, dict) and set(row) == {"sha256", "size"} and
+                SHA256.fullmatch(str(row.get("sha256", ""))) and
+                type(row.get("size")) is int and row["size"] > 0,
+                f"Invalid conformance {field} identity")
+    require(record["conformance"].get("package") == "org.wonad.desktop" and
+            SHA256.fullmatch(str(record["conformance"].get("payload_sha256", ""))) and
+            record["conformance"].get("signing", {}).get("signers") == 1,
+            "Invalid conformance APK record")
+    signing = record["conformance"].get("signing", {})
+    lineage = signing.get("lineage_certificate_sha256")
+    require(isinstance(lineage, list) and
+            all(isinstance(digest, str) and SHA256.fullmatch(digest)
+                for digest in lineage) and len(set(lineage)) == len(lineage),
+            "Invalid conformance APK signing-certificate lineage record")
+    if record["qualification"] == "production":
+        require(not lineage,
+                "Production client provenance must not contain signing-certificate lineage/history")
+    require(isinstance(record["public_signer"], dict) and
+            SHA256.fullmatch(str(record["public_signer"].get("der_sha256", ""))) and
+            isinstance(record["public_signer"].get("file"), dict),
+            "Invalid client public signer record")
+    for name in ("source_receipt",):
+        row = record[name]
+        require(isinstance(row, dict) and set(row) == {"sha256", "size"} and
+                SHA256.fullmatch(str(row.get("sha256", ""))) and
+                type(row.get("size")) is int and row["size"] > 0,
+                f"Invalid client {name} identity")
+    return record
+
+
+def copy_evidence_file(source: Path, destination: Path):
+    reference = file_ref(source, reject_private_content=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    require(not destination.exists() and not destination.is_symlink(),
+            f"Refusing to overwrite client evidence: {destination}")
+    shutil.copyfile(source, destination, follow_symlinks=False)
+    os.chmod(destination, 0o644)
+    require(file_ref(destination) == reference, f"Client evidence changed while copying: {source}")
+
+
+def stage_client_evidence(sdk_repository: Path, conformance_apk: Path, source_receipt: Path,
+                          certificate: Path, apksigner: Path, client_record_path: Path,
+                          source_record_path: Path, destination: Path):
+    """Create a self-contained, non-secret evidence tree for a signed release."""
+    source_record = validate_source_record_shape(load_json(source_record_path))
+    expected = validate_clients_shape(load_json(client_record_path))
+    require(expected["qualification"] == "production",
+            "Only production client evidence can accompany a production OS release")
+    actual = collect_clients(sdk_repository, conformance_apk, source_receipt,
+                             certificate, apksigner, "production")
+    require(actual == expected, "Client provenance differs from the immutable record")
+    require(not destination.exists() and not destination.is_symlink(),
+            "Client evidence destination already exists")
+    require(destination.parent.is_dir() and not destination.parent.is_symlink(),
+            "Client evidence parent must be an ordinary existing directory")
+    temporary = Path(tempfile.mkdtemp(prefix=".wonad-provenance.", dir=destination.parent))
+    try:
+        copy_evidence_file(source_record_path, temporary / "source-provenance.json")
+        copy_evidence_file(client_record_path, temporary / "client-provenance.json")
+        copy_evidence_file(conformance_apk, temporary / "conformance.apk")
+        copy_evidence_file(certificate, temporary / "signer-certificate.x509")
+        compile_root = source_receipt.parent
+        for name in ("build-receipt.json", "source-freeze.json", "conformance-unsigned.apk"):
+            copy_evidence_file(compile_root / name, temporary / "compile" / name)
+        frozen_files = expected["source_freeze"]["files"]
+        for name in sorted(frozen_files):
+            relative = safe_relative(name)
+            copy_evidence_file(compile_root / "source" / relative,
+                               temporary / "compile/source" / relative)
+        for name in sorted(expected["sdk_publication"]["files"]):
+            relative = safe_relative(name)
+            copy_evidence_file(sdk_repository / relative, temporary / "sdk" / relative)
+        os.rename(temporary, destination)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return {"source": source_record, "clients": expected}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    capture = commands.add_parser("capture-builder")
+    capture.add_argument("--image", required=True)
+    capture.add_argument("--output", type=Path, required=True)
+    capture.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
+    verify_builder = commands.add_parser("verify-builder")
+    verify_builder.add_argument("--record", type=Path, required=True)
+    verify_builder.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
+    create_source = commands.add_parser("create-source")
+    create_source.add_argument("--source", type=Path, required=True)
+    create_source.add_argument("--builder-record", type=Path, required=True)
+    create_source.add_argument("--output", type=Path, required=True)
+    create_source.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
+    create_source.add_argument("--jobs", type=int, default=32)
+    verify_source_command = commands.add_parser("verify-source")
+    verify_source_command.add_argument("--source", type=Path, required=True)
+    verify_source_command.add_argument("--builder-record", type=Path, required=True)
+    verify_source_command.add_argument("--record", type=Path, required=True)
+    verify_source_command.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
+    verify_source_command.add_argument("--jobs", type=int, default=32)
+    verify_source_command.add_argument("--allow-build-outputs", action="store_true",
+                                       help="ignore only out/ and releases/ during a post-build recheck")
+    clean_vendor = commands.add_parser("clean-vendor-cache")
+    clean_vendor.add_argument("--source", type=Path, required=True)
+    distinct_signers = commands.add_parser("assert-distinct-os-signers")
+    distinct_signers.add_argument("--signer-certificate", type=Path, required=True)
+    distinct_signers.add_argument("--os-certificate", type=Path, action="append",
+                                  required=True)
+    create_clients = commands.add_parser("create-clients")
+    create_clients.add_argument("--sdk-publication", type=Path, required=True)
+    create_clients.add_argument("--conformance-apk", type=Path, required=True)
+    create_clients.add_argument("--source-receipt", type=Path, required=True)
+    create_clients.add_argument("--signer-certificate", type=Path, required=True)
+    create_clients.add_argument("--apksigner", type=Path, required=True)
+    create_clients.add_argument("--qualification", choices=("production", "development"), required=True)
+    create_clients.add_argument("--output", type=Path, required=True)
+    verify_clients = commands.add_parser("verify-clients")
+    for action in (verify_clients,):
+        action.add_argument("--sdk-publication", type=Path, required=True)
+        action.add_argument("--conformance-apk", type=Path, required=True)
+        action.add_argument("--source-receipt", type=Path, required=True)
+        action.add_argument("--signer-certificate", type=Path, required=True)
+        action.add_argument("--apksigner", type=Path, required=True)
+        action.add_argument("--record", type=Path, required=True)
+    stage_clients = commands.add_parser("stage-client-evidence")
+    stage_clients.add_argument("--sdk-publication", type=Path, required=True)
+    stage_clients.add_argument("--conformance-apk", type=Path, required=True)
+    stage_clients.add_argument("--source-receipt", type=Path, required=True)
+    stage_clients.add_argument("--signer-certificate", type=Path, required=True)
+    stage_clients.add_argument("--apksigner", type=Path, required=True)
+    stage_clients.add_argument("--client-record", type=Path, required=True)
+    stage_clients.add_argument("--source-record", type=Path, required=True)
+    stage_clients.add_argument("--destination", type=Path, required=True)
+    arguments = parser.parse_args(argv)
+    try:
+        if arguments.command == "capture-builder":
+            value = capture_builder(arguments.image, arguments.lock)
+            atomic_new(arguments.output, value)
+            print(json.dumps({"status": "created", "kind": value["kind"],
+                              "output": str(arguments.output)}, sort_keys=True))
+        elif arguments.command == "verify-builder":
+            value = validate_builder(load_json(arguments.record), validate_lock(load_json(arguments.lock)))
+            print(json.dumps({"status": "verified", "image": value["image"]["id"]}, sort_keys=True))
+        elif arguments.command == "create-source":
+            value = collect_source(arguments.source, arguments.builder_record, arguments.lock, arguments.jobs)
+            validate_source_record_shape(value)
+            atomic_new(arguments.output, value)
+            print(json.dumps({"status": "created", "projects": value["manifest"]["project_count"],
+                              "generated_inputs": len(value["generated_inputs"])}, sort_keys=True))
+        elif arguments.command == "verify-source":
+            value = verify_source(arguments.source, arguments.record, arguments.builder_record,
+                                  arguments.lock, arguments.jobs, arguments.allow_build_outputs)
+            print(json.dumps({"status": "verified", "projects": value["manifest"]["project_count"],
+                              "generated_inputs": len(value["generated_inputs"])}, sort_keys=True))
+        elif arguments.command == "clean-vendor-cache":
+            removed = clean_vendor_cache(arguments.source)
+            print(json.dumps({"status": "clean", "removed": removed}, sort_keys=True))
+        elif arguments.command == "assert-distinct-os-signers":
+            value = assert_distinct_os_signers(arguments.signer_certificate,
+                                               arguments.os_certificate)
+            print(json.dumps({"status": "distinct", **value}, sort_keys=True))
+        elif arguments.command == "create-clients":
+            value = collect_clients(arguments.sdk_publication, arguments.conformance_apk,
+                                    arguments.source_receipt, arguments.signer_certificate,
+                                    arguments.apksigner, arguments.qualification)
+            validate_clients_shape(value)
+            atomic_new(arguments.output, value)
+            print(json.dumps({"status": "created", "qualification": value["qualification"],
+                              "apk_sha256": value["conformance"]["apk"]["sha256"]}, sort_keys=True))
+        elif arguments.command == "verify-clients":
+            expected = validate_clients_shape(load_json(arguments.record))
+            actual = collect_clients(arguments.sdk_publication, arguments.conformance_apk,
+                                     arguments.source_receipt, arguments.signer_certificate,
+                                     arguments.apksigner, expected["qualification"])
+            require(actual == expected, "Client provenance differs from the immutable record")
+            print(json.dumps({"status": "verified", "qualification": expected["qualification"],
+                              "apk_sha256": expected["conformance"]["apk"]["sha256"]}, sort_keys=True))
+        elif arguments.command == "stage-client-evidence":
+            value = stage_client_evidence(
+                arguments.sdk_publication, arguments.conformance_apk,
+                arguments.source_receipt, arguments.signer_certificate,
+                arguments.apksigner, arguments.client_record, arguments.source_record,
+                arguments.destination)
+            print(json.dumps({"status": "staged", "destination": str(arguments.destination),
+                              "qualification": value["clients"]["qualification"]}, sort_keys=True))
+        else:  # argparse constrains this, but keep dispatch fail-closed.
+            raise ProvenanceError(f"Unsupported provenance command: {arguments.command}")
+        return 0
+    except (ProvenanceError, OSError, KeyError, TypeError, AttributeError, ET.ParseError) as error:
+        print(f"phase1 provenance failed: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

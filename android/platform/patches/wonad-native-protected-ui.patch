@@ -1,0 +1,24 @@
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -1284,2 +1284,5 @@
+     long getWonadNativeIdentityEpoch();
++
++    /** Native protected-window observation; SystemUI-only, no APK authority. */
++    boolean isWonadNativeInteractionBlocked(int userId);
+ }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8381,6 +8381,11 @@
+     public long getWonadNativeIdentityEpoch() {
+         return WonadNativeBridge.identityEpoch(this);
+     }
++
++    @Override
++    public boolean isWonadNativeInteractionBlocked(int userId) {
++        return WonadNativeBridge.interactionBlocked(this, userId);
++    }
+ 
+     @Override
+     public boolean setWonadFocusLease(int displayId, int userId, long generation,

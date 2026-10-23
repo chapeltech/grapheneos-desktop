@@ -1,0 +1,22 @@
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -1260,4 +1260,7 @@
+     /** SystemUI-only external-task focus lease, independent of shortcut capture. */
+     boolean setWonadFocusLease(int displayId, int userId, long generation,
+             long expiresElapsedRealtime, in IBinder[] taskTokens, IBinder owner);
++
++    /** SystemUI-only authoritative focus observation, including empty desktops. */
++    int getWonadFocusedDisplayId();
+ }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8316,2 +8316,7 @@
+     @Override
++    public int getWonadFocusedDisplayId() {
++        return WonadFocusBridge.focusedDisplay(this);
++    }
++
++    @Override
+     public boolean setWonadFocusLease(int displayId, int userId, long generation,

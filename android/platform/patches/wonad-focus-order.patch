@@ -1,0 +1,22 @@
+diff --git a/services/core/java/com/android/server/wm/Task.java b/services/core/java/com/android/server/wm/Task.java
+--- a/services/core/java/com/android/server/wm/Task.java
++++ b/services/core/java/com/android/server/wm/Task.java
+@@ -2961,5 +2961,6 @@
+         final boolean toTop = position >= (mChildren.size() - 1);
+         position = getAdjustedChildPosition(child, position);
+-        super.positionChildAt(position, child, includingParents);
++        super.positionChildAt(position, child,
++                WonadFocusBridge.propagateTaskPosition(this, child, toTop, includingParents));
+ 
+         // Log positioning.
+diff --git a/services/core/java/com/android/server/wm/TaskFragment.java b/services/core/java/com/android/server/wm/TaskFragment.java
+--- a/services/core/java/com/android/server/wm/TaskFragment.java
++++ b/services/core/java/com/android/server/wm/TaskFragment.java
+@@ -1399,4 +1399,6 @@
+                         && (!com.android.window.flags.Flags.fixMultiWindowTaskFocusChange()
+                                 || next.getTask().compareTo(focusedApp.getTask()) > 0))) {
+-                    taskDisplayArea.mDisplayContent.setFocusedApp(next);
++                    if (!WonadFocusBridge.keepResumedFocus(focusedApp, next)) {
++                        taskDisplayArea.mDisplayContent.setFocusedApp(next);
++                    }
+                 }

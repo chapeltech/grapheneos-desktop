@@ -1,0 +1,29 @@
+diff --git a/core/java/android/view/IWindowManager.aidl b/core/java/android/view/IWindowManager.aidl
+--- a/core/java/android/view/IWindowManager.aidl
++++ b/core/java/android/view/IWindowManager.aidl
+@@ -1800,2 +1800,7 @@
+     boolean isWonadNativeInteractionBlocked(int userId);
++    /** SystemUI-only opt-in fixed control-key lease. */
++    boolean setWonadShortcutKeyLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, IShortcutService receiver);
++    /** Immutable product input prefix; not shortcut authority. */
++    int getWonadShortcutPrefix();
+ }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -8316,2 +8316,14 @@
+     @Override
++    public boolean setWonadShortcutKeyLease(int displayId, int userId, long generation,
++            long expiresElapsedRealtime, IShortcutService receiver) {
++        return org.wonad.server.input.WonadInputBridge.setKeyLease(mContext, displayId,
++                userId, generation, expiresElapsedRealtime, receiver);
++    }
++
++    @Override
++    public int getWonadShortcutPrefix() {
++        return org.wonad.server.input.WonadInputBridge.shortcutPrefix(mContext);
++    }
++
++    @Override
+     public boolean setWonadShortcutLease(int displayId, int userId, long generation,

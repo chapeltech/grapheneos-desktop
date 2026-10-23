@@ -1,0 +1,463 @@
+{
+  "audited_files": [
+    {
+      "path": "external/hardened_malloc/Makefile",
+      "sha256": "dcdde5a7a7278f95fe17aa6f57fe2a4c418a54deac33cbc3671e26ee8571393c"
+    },
+    {
+      "path": "external/hardened_malloc/README.md",
+      "sha256": "780c4c9799f6c9f16c92b053ab71be07f512e527978576fc1a2039d9d7cb4899"
+    },
+    {
+      "path": "external/hardened_malloc/test/Makefile",
+      "sha256": "f6c5524a0ef03fe2c36e1e1086f8331abd35ee68bb06133848afc008957c0e49"
+    },
+    {
+      "path": "frameworks/base/packages/SystemUI/checks/Android.bp",
+      "sha256": "0213755209b4ad06875f96039f7c938d41d016fc1e918341f08ff143ae610bfd"
+    },
+    {
+      "path": "frameworks/base/tests/DuressPasswordTest/Android.bp",
+      "sha256": "b26fd892db73db69944fcb6b368c8b3302b2a81eb34a3737137ce32799134809"
+    },
+    {
+      "path": "frameworks/base/tests/GosCompatTests/GosCompatDmaBufReleaseTests/Android.bp",
+      "sha256": "5b1d2213626b491b64c25ece43259d0d1bb404c108dd0e66d8e35dc8301d5e4f"
+    },
+    {
+      "path": "frameworks/base/tests/GosCompatTests/GosCompatMapsScanTests/Android.bp",
+      "sha256": "163e3a355fe504777ee0fcb5cd9034814e5a50192c7ccd79e3d748a3a3bee6f4"
+    },
+    {
+      "path": "frameworks/base/tests/GosCompatTests/GosCompatSecureSpawnTests/Android.bp",
+      "sha256": "d41ad608e6be55ac3af8da03d60e9ac46176166a8c4bea296e4dec74284f2235"
+    },
+    {
+      "path": "frameworks/base/tests/GosCompatTests/GosCompatWebViewTests/Android.bp",
+      "sha256": "e109c99717c1ebeba4d8745fd10160f767ed208642e8d400ae153ee7650c3c1b"
+    },
+    {
+      "path": "frameworks/base/tests/GosCompatTests/GosCompatWifiScanTimeoutTests/Android.bp",
+      "sha256": "2c75a104117d7e0fe0eb4892a0eee4dacca7279e7143f33aa99afcc44090ec24"
+    },
+    {
+      "path": "frameworks/base/tests/GosCompatTests/TEST_MAPPING",
+      "sha256": "9b38a73b8121eec201952dc9cade8734ee404390c6534bf06df5d5afbdeaf5b9"
+    },
+    {
+      "path": "frameworks/base/tests/HardeningTest/Android.bp",
+      "sha256": "78a66ef29a04331813bfac7b2b2bfffe707b768d4ffdc391307e95133f213444"
+    },
+    {
+      "path": "frameworks/base/tests/Input/Android.bp",
+      "sha256": "9b0e0c92f6da6263b6a73a9b4a8734ea8449add2556c775eddc056abcf78de4b"
+    },
+    {
+      "path": "frameworks/base/tests/Input/src/com/android/server/input/KeyGestureControllerTests.kt",
+      "sha256": "f14238927f72d9b8939fcf1f707d7f7c869490146d8b3125b86d9f82932b7077"
+    },
+    {
+      "path": "frameworks/base/tests/SecurePasteTests/Android.bp",
+      "sha256": "9b464df75d9008544f5246249134fe367ddc00d5b982525a51b7a2994a8de90d"
+    },
+    {
+      "path": "frameworks/base/tests/SecurePasteTests/TEST_MAPPING",
+      "sha256": "d472ecef236c4f024529b0bbb1aeb8bdcdecfeb56a26b8b9773648ec446a2f1c"
+    },
+    {
+      "path": "frameworks/native/services/inputflinger/tests/Android.bp",
+      "sha256": "857dbfc44a330d6a9607bed268af7b333217db388aca8640f2ea5105be6b07d7"
+    },
+    {
+      "path": "packages/apps/Launcher3/checks/Android.bp",
+      "sha256": "d65ce0279cae0975ca07ce447fe657e58ee37a2f905011b97c0db7563243a83b"
+    },
+    {
+      "path": "packages/modules/Permission/tests/hostside/safetycenter/Android.bp",
+      "sha256": "9a8ac13b1b91bd6d340ed79528568fd58e442912c8d0dfa04f2bfcd56b229418"
+    },
+    {
+      "path": "packages/modules/Permission/tests/lint/Android.bp",
+      "sha256": "84298191c25a5c734a4080323e04aa40a01936b34fb6eb57a2f5162ed3906723"
+    },
+    {
+      "path": "packages/providers/ContactsProvider/TEST_MAPPING",
+      "sha256": "a1e66bc311cf2b41af9474be83643dd8b93c0d0c44ccabfe4e93dcae524e1006"
+    },
+    {
+      "path": "packages/providers/ContactsProvider/tests/ContactScopesTests/Android.bp",
+      "sha256": "2691b2a1e1071352d056370237ed3a15590e69daa99643b6b81ba140bc7e4d50"
+    },
+    {
+      "path": "packages/providers/ContactsProvider/tests/ContactScopesTests/TEST_MAPPING",
+      "sha256": "737e9c15812ce552831a046d51eca9a03226ee691013832a270970ab5e47f4e3"
+    }
+  ],
+  "candidate_exclusions": [
+    {
+      "definition_path": "packages/providers/ContactsProvider/tests/ContactScopesTests/Android.bp",
+      "exclusion_code": "contacts_scope_not_desktop_windowing",
+      "id": "grapheneos_contact_scopes_host",
+      "kind": "grapheneos_host_module",
+      "module": "ContactScopesTests",
+      "module_type": "java_test_host",
+      "project_path": "packages/providers/ContactsProvider",
+      "reason": "The GrapheneOS host module tests contact-scope provider behavior and declares no coverage of system-server window management, WM Shell, external-display input, SystemUI desktop ownership, Launcher desktop routing, or privileged desktop package identity."
+    },
+    {
+      "definition_path": "frameworks/base/tests/DuressPasswordTest/Android.bp",
+      "exclusion_code": "duress_password_not_desktop_windowing",
+      "id": "grapheneos_duress_password_host",
+      "kind": "grapheneos_host_module",
+      "module": "DuressPasswordTest",
+      "module_type": "java_test_host",
+      "project_path": "frameworks/base",
+      "reason": "The GrapheneOS host module exercises duress-password behavior and has no source declaration tying it to the external-display desktop integration."
+    },
+    {
+      "definition_path": "frameworks/base/tests/GosCompatTests/GosCompatDmaBufReleaseTests/Android.bp",
+      "exclusion_code": "device_only_dmabuf_compat",
+      "id": "grapheneos_gos_compat_dmabuf_device",
+      "kind": "grapheneos_device_module",
+      "module": "GosCompatDmaBufReleaseTests",
+      "module_type": "android_test",
+      "project_path": "frameworks/base",
+      "reason": "The gos-postsubmit module is an Android device test for dma-buf release compatibility, not a host-executable test and not declared as external-desktop coverage."
+    },
+    {
+      "definition_path": "frameworks/base/tests/GosCompatTests/GosCompatMapsScanTests/Android.bp",
+      "exclusion_code": "device_only_maps_scan_compat",
+      "id": "grapheneos_gos_compat_maps_device",
+      "kind": "grapheneos_device_module",
+      "module": "GosCompatMapsScanTests",
+      "module_type": "android_test",
+      "project_path": "frameworks/base",
+      "reason": "The gos-postsubmit module is an Android device test for process-map compatibility, not a host-executable test and not declared as external-desktop coverage."
+    },
+    {
+      "definition_path": "frameworks/base/tests/GosCompatTests/GosCompatSecureSpawnTests/Android.bp",
+      "exclusion_code": "secure_spawn_not_desktop_windowing",
+      "id": "grapheneos_gos_compat_secure_spawn_host",
+      "kind": "grapheneos_host_module",
+      "module": "GosCompatSecureSpawnTests",
+      "module_type": "java_test_host",
+      "project_path": "frameworks/base",
+      "reason": "The GrapheneOS host module is declared for secure-spawn compatibility, not for the external-display window manager or its privileged OS glue."
+    },
+    {
+      "definition_path": "frameworks/base/tests/GosCompatTests/GosCompatWebViewTests/Android.bp",
+      "exclusion_code": "device_only_webview_compat",
+      "id": "grapheneos_gos_compat_webview_device",
+      "kind": "grapheneos_device_module",
+      "module": "GosCompatWebViewTests",
+      "module_type": "android_test",
+      "project_path": "frameworks/base",
+      "reason": "The gos-postsubmit module is an Android device test for WebView compatibility, not a host-executable test and not declared as external-desktop coverage."
+    },
+    {
+      "definition_path": "frameworks/base/tests/GosCompatTests/GosCompatWifiScanTimeoutTests/Android.bp",
+      "exclusion_code": "device_only_wifi_scan_compat",
+      "id": "grapheneos_gos_compat_wifi_device",
+      "kind": "grapheneos_device_module",
+      "module": "GosCompatWifiScanTimeoutTests",
+      "module_type": "android_test",
+      "project_path": "frameworks/base",
+      "reason": "The gos-postsubmit module is an Android device test for Wi-Fi scan timeout compatibility, not a host-executable test and not declared as external-desktop coverage."
+    },
+    {
+      "definition_path": "external/hardened_malloc/Makefile",
+      "exclusion_code": "allocator_not_desktop_windowing",
+      "id": "grapheneos_hardened_malloc_standalone",
+      "kind": "standalone_host_check",
+      "module": null,
+      "module_type": null,
+      "project_path": "external/hardened_malloc",
+      "reason": "The standalone allocator checks are GrapheneOS-relevant hardening tests but the pinned source does not declare them as coverage for Android window management, external displays, input routing, SystemUI, Launcher, or privileged desktop package identity."
+    },
+    {
+      "definition_path": "frameworks/base/tests/HardeningTest/Android.bp",
+      "exclusion_code": "hardening_not_desktop_windowing",
+      "id": "grapheneos_hardening_host",
+      "kind": "grapheneos_host_module",
+      "module": "HardeningTest",
+      "module_type": "java_test_host",
+      "project_path": "frameworks/base",
+      "reason": "The GrapheneOS host module checks platform hardening behavior and declares no coverage of the external-display desktop integration."
+    },
+    {
+      "definition_path": "frameworks/base/tests/SecurePasteTests/Android.bp",
+      "exclusion_code": "device_only_secure_paste",
+      "id": "grapheneos_secure_paste_device",
+      "kind": "grapheneos_device_module",
+      "module": "SecurePasteTests",
+      "module_type": "android_test",
+      "project_path": "frameworks/base",
+      "reason": "The GrapheneOS SecurePasteTests module is device-only; relevant shortcut interception coverage is required in the separately authenticated emulator class."
+    },
+    {
+      "definition_path": "frameworks/base/tests/Input/Android.bp",
+      "exclusion_code": "device_only_secure_paste_input",
+      "id": "grapheneos_secure_paste_input_device",
+      "kind": "grapheneos_device_module",
+      "module": "InputTests",
+      "module_type": "android_test",
+      "project_path": "frameworks/base",
+      "reason": "The four exact Secure Paste KeyGestureController cases selected by gos-postsubmit belong to the device InputTests module and therefore must run in the emulator class."
+    },
+    {
+      "definition_path": "frameworks/base/tests/Input/Android.bp",
+      "exclusion_code": "secure_paste_class_disabled_on_ravenwood",
+      "id": "generic_input_ravenwood_disabled",
+      "kind": "generic_host_module",
+      "module": "InputTestsRavenwood",
+      "module_type": "android_ravenwood_test",
+      "project_path": "frameworks/base",
+      "reason": "A generic Ravenwood module exists, but KeyGestureControllerTests is explicitly DisabledOnRavenwood; it cannot execute the four relevant Secure Paste cases as host evidence."
+    },
+    {
+      "definition_path": "frameworks/native/services/inputflinger/tests/Android.bp",
+      "exclusion_code": "generic_aosp_not_grapheneos_specific",
+      "id": "generic_inputflinger_host",
+      "kind": "generic_host_module",
+      "module": "inputflinger_tests",
+      "module_type": "cc_test",
+      "project_path": "frameworks/native",
+      "reason": "The host-supported inputflinger module is generic AOSP coverage and no GrapheneOS TEST_MAPPING declaration selects it as GrapheneOS-specific external-desktop coverage."
+    },
+    {
+      "definition_path": "packages/apps/Launcher3/checks/Android.bp",
+      "exclusion_code": "lint_checker_not_runtime_desktop",
+      "id": "generic_launcher_lint_host",
+      "kind": "generic_host_module",
+      "module": "Launcher3LintCheckerTest",
+      "module_type": "java_test_host",
+      "project_path": "packages/apps/Launcher3",
+      "reason": "This generic host module unit-tests a lint checker and does not execute Launcher task routing, Recents integration, or external-display desktop behavior."
+    },
+    {
+      "definition_path": "packages/modules/Permission/tests/lint/Android.bp",
+      "exclusion_code": "lint_checker_not_package_identity_runtime",
+      "id": "generic_permission_lint_host",
+      "kind": "generic_host_module",
+      "module": "PermissionPolicyLintCheckerTest",
+      "module_type": "java_test_host",
+      "project_path": "packages/modules/Permission",
+      "reason": "This generic host module unit-tests permission-policy lint rules rather than the privileged desktop owner identity and runtime permission boundary."
+    },
+    {
+      "definition_path": "packages/modules/Permission/tests/hostside/safetycenter/Android.bp",
+      "exclusion_code": "safety_center_not_desktop_identity",
+      "id": "generic_safetycenter_host",
+      "kind": "generic_host_module",
+      "module": "SafetyCenterHostSideTestCases",
+      "module_type": "java_test_host",
+      "project_path": "packages/modules/Permission",
+      "reason": "This generic host module covers Safety Center, not external-display desktop ownership or the Wonad privileged package identity."
+    },
+    {
+      "definition_path": "frameworks/base/packages/SystemUI/checks/Android.bp",
+      "exclusion_code": "lint_checker_not_runtime_systemui",
+      "id": "generic_systemui_lint_host",
+      "kind": "generic_host_module",
+      "module": "SystemUILintCheckerTest",
+      "module_type": "java_test_host",
+      "project_path": "frameworks/base",
+      "reason": "This generic host module unit-tests a SystemUI lint checker and does not execute external-display decoration ownership, taskbar suppression, or desktop lifecycle behavior."
+    }
+  ],
+  "conclusion": {
+    "disclaimer": "No applicable GrapheneOS-specific host check is declared in the exact pinned source within the reviewed bounds; this does not assert absence from external or unpublished GrapheneOS CI.",
+    "reason": "The complete native TEST_MAPPING inventory exposes exactly four GrapheneOS groups. Their host modules are unrelated to the external desktop, while the only relevant GrapheneOS Secure Paste overlap selects four device InputTests cases whose test class is explicitly disabled in the corresponding Ravenwood host module. Relevant generic host candidates are recorded separately and are not relabeled as GrapheneOS-specific evidence.",
+    "result": "not_applicable_source_declared"
+  },
+  "device_overlap": {
+    "command_anchor": "atest InputTests:KeyGestureControllerTests",
+    "device_module": "InputTests",
+    "disabled_on_ravenwood_marker": "@DisabledOnRavenwood(reason = \"Static mocking in bivalent tests is tricky\", bug = 310268946)",
+    "filters": [
+      "com.android.server.input.KeyGestureControllerTests#testSecurePasteShortcuts_passThroughBeforeDispatch",
+      "com.android.server.input.KeyGestureControllerTests#testSecurePasteShortcuts_notInterceptedWhenUnhandled",
+      "com.android.server.input.KeyGestureControllerTests#testSecurePasteGrant_onlyForTrustedInitialDown",
+      "com.android.server.input.KeyGestureControllerTests#testSecurePasteGrant_notCreatedWhenWmConsumes"
+    ],
+    "host_module": "InputTestsRavenwood",
+    "input_android_bp_path": "frameworks/base/tests/Input/Android.bp",
+    "mapping_path": "frameworks/base/tests/SecurePasteTests/TEST_MAPPING",
+    "test_class": "com.android.server.input.KeyGestureControllerTests",
+    "test_source_path": "frameworks/base/tests/Input/src/com/android/server/input/KeyGestureControllerTests.kt"
+  },
+  "gos_mappings": [
+    {
+      "entries": {
+        "gos_postsubmit": [
+          {
+            "name": "GosCompatMapsScanTests"
+          },
+          {
+            "name": "GosCompatWebViewTests"
+          },
+          {
+            "name": "GosCompatDmaBufReleaseTests"
+          },
+          {
+            "name": "GosCompatWifiScanTimeoutTests"
+          },
+          {
+            "name": "GosCompatSecureSpawnTests"
+          }
+        ]
+      },
+      "path": "frameworks/base/tests/GosCompatTests/TEST_MAPPING",
+      "sha256": "9b38a73b8121eec201952dc9cade8734ee404390c6534bf06df5d5afbdeaf5b9"
+    },
+    {
+      "entries": {
+        "gos-postsubmit": [
+          {
+            "name": "SecurePasteTests"
+          },
+          {
+            "name": "InputTests",
+            "options": [
+              {
+                "include-filter": "com.android.server.input.KeyGestureControllerTests#testSecurePasteShortcuts_passThroughBeforeDispatch"
+              },
+              {
+                "include-filter": "com.android.server.input.KeyGestureControllerTests#testSecurePasteShortcuts_notInterceptedWhenUnhandled"
+              },
+              {
+                "include-filter": "com.android.server.input.KeyGestureControllerTests#testSecurePasteGrant_onlyForTrustedInitialDown"
+              },
+              {
+                "include-filter": "com.android.server.input.KeyGestureControllerTests#testSecurePasteGrant_notCreatedWhenWmConsumes"
+              }
+            ]
+          }
+        ]
+      },
+      "path": "frameworks/base/tests/SecurePasteTests/TEST_MAPPING",
+      "sha256": "d472ecef236c4f024529b0bbb1aeb8bdcdecfeb56a26b8b9773648ec446a2f1c"
+    },
+    {
+      "entries": {
+        "gos-postsubmit": [
+          {
+            "name": "ContactScopesTests"
+          }
+        ]
+      },
+      "path": "packages/providers/ContactsProvider/TEST_MAPPING",
+      "sha256": "a1e66bc311cf2b41af9474be83643dd8b93c0d0c44ccabfe4e93dcae524e1006"
+    },
+    {
+      "entries": {
+        "gos-postsubmit": [
+          {
+            "name": "ContactScopesTests"
+          }
+        ]
+      },
+      "path": "packages/providers/ContactsProvider/tests/ContactScopesTests/TEST_MAPPING",
+      "sha256": "737e9c15812ce552831a046d51eca9a03226ee691013832a270970ab5e47f4e3"
+    }
+  ],
+  "kind": "wonad-phase1-grapheneos-host-applicability-definition",
+  "projects": [
+    {
+      "commit": "b0f697df8cc9519408ca0a404e918cd51bde0735",
+      "path": "build/make"
+    },
+    {
+      "commit": "250710f7f87acfbb8e3c517d90abde8b4a08fe1e",
+      "path": "build/soong"
+    },
+    {
+      "commit": "c28cd930b0d059ef7704fc816e9d6f367f93fcdd",
+      "path": "external/hardened_malloc"
+    },
+    {
+      "commit": "84183aff99be5e156dc0446a6fa2d4a7150f4bc3",
+      "path": "frameworks/base"
+    },
+    {
+      "commit": "2b48d4c9eeaf8bfaa443d8ac7d155995a4d4277f",
+      "path": "frameworks/libs/systemui"
+    },
+    {
+      "commit": "1c83ac6ae533c74ecb0486369c0d2f9e79783b3d",
+      "path": "frameworks/native"
+    },
+    {
+      "commit": "47accce386f2abdc84e87c05b5587be6e0b0854f",
+      "path": "packages/apps/Launcher3"
+    },
+    {
+      "commit": "4d6005dbabf3f2bf96e5215c5c2801809b051bf3",
+      "path": "packages/modules/Permission"
+    },
+    {
+      "commit": "7b2672db7d5e4e1f0e446f44ad3438cf900bd1d6",
+      "path": "packages/providers/ContactsProvider"
+    },
+    {
+      "commit": "09d651841b55e42b9cee7392f0ce29ebda8c8fb5",
+      "path": "script"
+    },
+    {
+      "commit": "322ff5129d865a5e8d958667e6c63ac943449493",
+      "path": "system/core"
+    }
+  ],
+  "release": "2026100600",
+  "result": "not_applicable_source_declared",
+  "schema": 1,
+  "scope": {
+    "blueprint_file_count": 1224,
+    "blueprint_path_inventory_sha256": "ebac6b6ef83428a12eba4f90c640ecd85ac41e57d60f48411f6cadc9eead4979",
+    "blueprint_roots": [
+      "build/make",
+      "build/soong",
+      "frameworks/base/core",
+      "frameworks/base/libs/WindowManager/Shell",
+      "frameworks/base/packages/SystemUI",
+      "frameworks/base/services",
+      "frameworks/base/tests",
+      "frameworks/libs/systemui",
+      "frameworks/native/services/inputflinger",
+      "packages/apps/Launcher3",
+      "packages/modules/Permission",
+      "packages/providers/ContactsProvider",
+      "script",
+      "system/core"
+    ],
+    "blueprint_skipped_symlink_count": 13,
+    "blueprint_skipped_symlink_inventory_sha256": "a25b1d574f6eceb3f4fdf60b91b48d53db74843c7e3789952f4bbf84cc9e3d8a",
+    "claim": "pinned-source-declarations-only-no-external-ci-claim",
+    "host_module_count": 128,
+    "host_module_inventory_sha256": "2ff28952f830f2ac6258c17364f84408ec1f74a4c4ed7b76ee32d1f005bcfebe",
+    "module_count": 4530,
+    "module_inventory_sha256": "d6d995abe0fd69b88ec6e21072c7dc344d5e5bbe89064114763935bfaa2bfd9f",
+    "test_mapping_count": 2096,
+    "test_mapping_inventory_sha256": "b6e5f50bcc795252b4e5a623b8d2418aa133e264d6895363a051eaf53f170026",
+    "test_mapping_skipped_symlink_count": 1615,
+    "test_mapping_skipped_symlink_inventory_sha256": "46197025298b9e16a950376c9556e1b7fddf5d7fb850fa8d48d63c9f592fbeb3",
+    "walk_exclusions": [
+      {
+        "reason": "repo metadata is not checked-out platform source",
+        "selector": "top-level:.repo"
+      },
+      {
+        "reason": "generated build output is authenticated by the build receipt",
+        "selector": "top-level:out"
+      },
+      {
+        "reason": "per-project Git metadata is not platform source",
+        "selector": "name:.git"
+      },
+      {
+        "reason": "do not escape or duplicate the receipted source tree",
+        "selector": "kind:symlink-directory"
+      }
+    ]
+  }
+}

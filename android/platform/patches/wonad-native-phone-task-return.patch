@@ -1,0 +1,13 @@
+diff --git a/services/core/java/com/android/server/wm/Task.java b/services/core/java/com/android/server/wm/Task.java
+--- a/services/core/java/com/android/server/wm/Task.java
++++ b/services/core/java/com/android/server/wm/Task.java
+@@ -3120,6 +3120,9 @@
+     void onDisplayChanged(DisplayContent dc) {
+         final int lastDisplayId = getDisplayId();
++        final DisplayContent previousWonadDisplay = getDisplayContent();
+         super.onDisplayChanged(dc);
++        // A stock phone launch need not physically remove the old monitor.
++        WonadUiBridge.onTaskDisplayChanged(this, previousWonadDisplay);
+         if (isLeafTask()) {
+             final int displayId = (dc != null) ? dc.getDisplayId() : INVALID_DISPLAY;
+             //Send the callback when the task reparented to another display.

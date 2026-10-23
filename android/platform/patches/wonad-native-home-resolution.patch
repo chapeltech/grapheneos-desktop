@@ -1,0 +1,57 @@
+diff --git a/services/core/java/com/android/server/wm/RootWindowContainer.java b/services/core/java/com/android/server/wm/RootWindowContainer.java
+--- a/services/core/java/com/android/server/wm/RootWindowContainer.java
++++ b/services/core/java/com/android/server/wm/RootWindowContainer.java
+@@ -1293,6 +1293,12 @@
+     @Nullable
+     private Pair<ActivityInfo, Intent> getHomeIntentAndInfoForTaskDisplayArea(
+             @NonNull TaskDisplayArea taskDisplayArea, int userId) {
++        return getHomeIntentAndInfoForTaskDisplayArea(taskDisplayArea, userId, false);
++    }
++
++    @Nullable
++    private Pair<ActivityInfo, Intent> getHomeIntentAndInfoForTaskDisplayArea(
++            @NonNull TaskDisplayArea taskDisplayArea, int userId, boolean allowInstrumenting) {
+         Intent homeIntent;
+         ActivityInfo aInfo;
+         if (taskDisplayArea == getDefaultTaskDisplayArea()
+@@ -1300,7 +1306,8 @@
+             homeIntent = mService.getHomeIntent();
+             aInfo = resolveHomeActivity(userId, homeIntent);
+         } else if (shouldPlaceSecondaryHomeOnDisplayArea(taskDisplayArea)) {
+-            Pair<ActivityInfo, Intent> info = resolveSecondaryHomeActivity(userId, taskDisplayArea);
++            Pair<ActivityInfo, Intent> info = resolveSecondaryHomeActivity(
++                    userId, taskDisplayArea, allowInstrumenting);
+             aInfo = info.first;
+             homeIntent = info.second;
+         } else {
+@@ -1440,7 +1447,7 @@
+         }
+ 
+         final Pair<ActivityInfo, Intent> homeActivityIntentPair =
+-                getHomeIntentAndInfoForTaskDisplayArea(taskDisplayArea, userId);
++                getHomeIntentAndInfoForTaskDisplayArea(taskDisplayArea, userId, allowInstrumenting);
+ 
+         if (homeActivityIntentPair == null) {
+             return false;
+@@ -1520,6 +1527,12 @@
+     @VisibleForTesting
+     Pair<ActivityInfo, Intent> resolveSecondaryHomeActivity(int userId,
+             @NonNull TaskDisplayArea taskDisplayArea) {
++        return resolveSecondaryHomeActivity(userId, taskDisplayArea, false);
++    }
++
++    @VisibleForTesting
++    Pair<ActivityInfo, Intent> resolveSecondaryHomeActivity(int userId,
++            @NonNull TaskDisplayArea taskDisplayArea, boolean allowInstrumenting) {
+         if (taskDisplayArea == getDefaultTaskDisplayArea()) {
+             throw new IllegalArgumentException(
+                     "resolveSecondaryHomeActivity: Should not be default task container");
+@@ -1575,7 +1588,7 @@
+ 
+         if (aInfo != null) {
+             if (!canStartHomeOnDisplayArea(aInfo, taskDisplayArea,
+-                    false /* allowInstrumenting */)) {
++                    allowInstrumenting)) {
+                 aInfo = null;
+             }
+         }

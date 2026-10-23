@@ -1,0 +1,32 @@
+diff --git a/packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt b/packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt
+--- a/packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt
++++ b/packages/SystemUI/src/com/android/systemui/display/data/repository/DisplaysWithDecorationsRepositoryImpl.kt
+@@ -50,3 +50,7 @@
+                 override fun onDisplayAddSystemDecorations(displayId: Int) {
++                    if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) {
++                        trySend(Event.Remove(displayId))
++                        return
++                    }
+                     if (ENABLE_DISPLAY_CONTENT_MODE_MANAGEMENT.isTrue()) {
+                         trySend(Event.Add(displayId))
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt b/packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/core/MultiDisplayStatusBarStarter.kt
+@@ -66,3 +66,4 @@
+     private fun createAndStartComponentsForDisplay(displayId: Int) {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) return
+         logger.logCreatingAndStartingComponents(displayId)
+         createAndStartOrchestratorForDisplay(displayId)
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt b/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/window/StatusBarWindowControllerStore.kt
+@@ -62,3 +62,4 @@
+     override fun createInstanceForDisplay(displayId: Int): StatusBarWindowController? {
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) return null
+         val displaySubcomponent = perDisplaySubcomponentRepo[displayId] ?: return null
+         val statusBarDisplayContext =
+@@ -70,3 +71,4 @@
+                 windowType = WindowManager.LayoutParams.TYPE_STATUS_BAR,
+             ) ?: return null
++        if (!org.wonad.desktop.broker.WonadNativeUi.allowStockDecorations(displayId)) return null
+         return controllerFactory.create(

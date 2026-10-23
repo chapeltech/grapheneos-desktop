@@ -1,0 +1,169 @@
+package org.wonad.desktop
+import android.os.IBinder
+
+__SHELL_RETIREMENT__
+
+private var checks = 0
+private fun yes(value: Boolean) { check(value); checks++ }
+private fun rejects(block: () -> Unit) {
+    var failed = false
+    try { block() } catch (_: IllegalArgumentException) { failed = true }
+    catch (_: IllegalStateException) { failed = true }
+    yes(failed)
+}
+private class BinderDouble : IBinder {
+    override var isBinderAlive = true
+    var recipient: IBinder.DeathRecipient? = null
+    var links = 0; var unlinks = 0; var linkFails = false
+    var unlinkFailure: Throwable? = null
+    override fun linkToDeath(recipient: IBinder.DeathRecipient, flags: Int) {
+        check(!linkFails) { "controlled link failure" }
+        this.recipient = recipient; links++
+    }
+    override fun unlinkToDeath(recipient: IBinder.DeathRecipient, flags: Int): Boolean {
+        yes(this.recipient === recipient); unlinks++; unlinkFailure?.let { throw it }; return true
+    }
+    fun die() { isBinderAlive = false; checkNotNull(recipient).binderDied() }
+}
+
+__INSTRUCTION__
+
+private data class Display(val shellGeneration: Long)
+private data class Observation(val generation: Long, val identityEpoch: Long,
+    val interactionBlocked: Boolean = false, val displays: List<Display> = listOf(Display(generation)))
+private object RuntimeSnapshot { fun capture(value: Observation) = value.copy() }
+private class Remote(val binder: BinderDouble) { fun asBinder(): IBinder = binder; fun release(generation: Long) {} }
+private class Binding { fun close() {} }
+private object ConformanceRegistry { fun displays(generation: Long, displays: List<Any>) {} }
+private class Events { var revocation: Any? = null; fun pollRevocation(): Any? = revocation.also { revocation = null } }
+private class Ledger {
+    var state = "ready"; var reason: Int? = null; var accepted = 0; var rejected = 0
+    fun accepted(nonce: String, phase: String) { accepted++ }
+    fun rejected(nonce: String, phase: String, error: String) { rejected++ }
+    fun undocked(reason: Int) { this.reason = reason; state = "waiting-reopen" }
+    fun brokerDied() { reason = null; state = "waiting-reopen" }
+}
+private class Runner {
+    private val malformedProof = java.util.concurrent.atomic.AtomicReference<String?>()
+    private fun malformedObserved(instruction: RuntimeHostInstruction): Unit =
+        error("malformed Binder phase is outside this broker scheduling model")
+    var now = 10L
+    var generation = 101L; var identityEpoch = 201L
+    var session: Remote? = Remote(BinderDouble())
+    var events: Events? = Events()
+    var snapshot: Observation? = Observation(generation, identityEpoch)
+    var remembered: Observation? = null; var plannedRecovery: Observation? = null
+    var recoveryLease: Pair<Long, Long>? = null
+    var waitingForReopen = false; var reopenReason: Int? = null; var reopenAfterBrokerDeath = false
+    val ledger = Ledger()
+    val expectedRevocation = ConformanceExpectedRevocation { now }
+    val expectedBrokerDeath = ConformanceExpectedBrokerDeath { now }
+    var schedulerRetired = false; var ordinaryOpens = 0; var failOpen = false
+    var binding: Binding? = Binding()
+    val shellRequested = mutableSetOf<Long>()
+    var stopFailure: Throwable? = null
+    init { expectedBrokerDeath.register(checkNotNull(session), checkNotNull(session).asBinder(), generation, identityEpoch) }
+    fun stopHeartbeat() { schedulerRetired = true; stopFailure?.let { throw it } }
+    __CLOSE__
+    __PRESERVE__
+    fun open(nonce: String, requestedPhase: String) {
+        ordinaryOpens++
+        check(!failOpen) { "ordinary authorization not restored" }
+        generation = 301; identityEpoch = 401
+        session = Remote(BinderDouble()); events = Events(); snapshot = Observation(generation, identityEpoch)
+        expectedBrokerDeath.register(checkNotNull(session), checkNotNull(session).asBinder(), generation, identityEpoch)
+        waitingForReopen = false; reopenReason = null; reopenAfterBrokerDeath = false
+    }
+    fun expectRevocation(instruction: RuntimeHostInstruction) { error("not a broker-death test") }
+    fun checkpoint(instruction: RuntimeHostInstruction) { }
+    fun copyObserved(instruction: RuntimeHostInstruction) { }
+    fun stop(instruction: RuntimeHostInstruction) { closeSession(true) }
+    __EXPECT__
+    __CONSUME__
+    __PROCESS__
+    fun arm(nonce: String = "a".repeat(32)) = process(RuntimeHostInstruction("c".repeat(32), nonce,
+        ConformanceContract.RUNTIME_EXPECT_BROKER_DEATH, brokerDeath = generation to identityEpoch))
+    fun observe() = consumeBrokerDeath()
+    fun closeForTest() = closeSession(false)
+    fun reopen() = process(RuntimeHostInstruction("c".repeat(32), "b".repeat(32), ConformanceContract.RUNTIME_REOPEN))
+}
+
+fun main() {
+    var clock = 10L
+    fun helper() = ConformanceExpectedBrokerDeath { clock }
+    val a = "a".repeat(32); val b = "b".repeat(32)
+    run {
+        val h = helper(); val owner = Any(); val binder = BinderDouble()
+        h.register(owner, binder, 1, 2); yes(binder.links == 1)
+        yes(!h.consume(owner, 1, 2)) // Heartbeat transport failure is not death.
+        rejects { h.arm(a, Any(), 1, 2) }; rejects { h.arm(a, owner, 3, 2) }
+        h.arm(a, owner, 1, 2); yes(h.pending()); yes(h.json().contains("\"registered\":true"))
+        rejects { h.arm(b, owner, 1, 2) }
+        binder.die(); yes(h.consume(owner, 1, 2)); yes(h.json().contains("\"callback_count\":1"))
+        rejects { h.consume(owner, 1, 2) }
+        val late = checkNotNull(binder.recipient)
+        h.retire(); yes(binder.unlinks == 1)
+        val replacement = Any(); val next = BinderDouble()
+        h.register(replacement, next, 1, 2) // Recycled numeric identities do NOT restore old owner.
+        late.binderDied(); yes(!h.consume(replacement, 1, 2))
+        rejects { h.arm(a, replacement, 1, 2) }
+        h.arm(b, replacement, 1, 2); yes(h.json().contains("\"owner_label\":2"))
+        next.die(); yes(h.consume(replacement, 1, 2)); h.retire()
+    }
+    run {
+        val h = helper(); val owner = Any(); val binder = BinderDouble()
+        h.register(owner, binder, 1, 2); binder.die(); rejects { h.consume(owner, 1, 2) }
+        h.retire()
+    }
+    for (case in 0..4) {
+        clock = 10
+        val h = helper(); val owner = Any(); val binder = BinderDouble()
+        h.register(owner, binder, 1, 2); h.arm(a, owner, 1, 2)
+        when (case) {
+            0 -> { clock = 120_011; binder.die() }
+            1 -> { binder.die(); clock = 120_011 }
+            2 -> { binder.die(); binder.die() }
+            3 -> { checkNotNull(binder.recipient).binderDied() } // Alive binder fabricated callback.
+            4 -> { binder.die(); clock = 9 }
+        }
+        rejects { h.consume(owner, 1, 2) }; h.retire()
+    }
+    run {
+        val h = helper(); val owner = Any(); val bad = BinderDouble().also { it.linkFails = true }
+        rejects { h.register(owner, bad, 1, 2) }
+        val good = BinderDouble(); h.register(owner, good, 1, 2); yes(good.links == 1); h.retire()
+    }
+    run {
+        val parsed = RuntimeHostInstruction.parse(arrayOf("runtime-command", "c".repeat(32), a, "expect-broker-death", "101", "201"))
+        yes(parsed.brokerDeath == (101L to 201L)); yes(parsed.revocation == null)
+        for (suffix in listOf(arrayOf("0", "201"), arrayOf("101", "0201"), arrayOf("101", "201", "5")))
+            rejects { RuntimeHostInstruction.parse(arrayOf("runtime-command", "c".repeat(32), a, "expect-broker-death", *suffix)) }
+    }
+    run {
+        val r = Runner(); val old = checkNotNull(r.session); val late = checkNotNull(old.binder.recipient)
+        r.arm(); yes(r.ledger.accepted == 1); yes(!r.observe())
+        r.now = 20; old.binder.die(); yes(r.observe()); yes(r.schedulerRetired && r.session == null)
+        yes(r.waitingForReopen && r.reopenAfterBrokerDeath && r.reopenReason == null && r.ledger.reason == null)
+        yes(r.plannedRecovery?.generation == 101L); yes(r.ordinaryOpens == 0)
+        r.failOpen = true; r.reopen(); yes(r.session == null && r.waitingForReopen && r.ledger.rejected == 1)
+        yes(r.plannedRecovery?.generation == 101L)
+        r.failOpen = false; r.reopen(); val current = r.session
+        yes(current != null && current !== old && r.generation == 301L)
+        late.binderDied(); yes(!r.observe()); yes(r.session === current && !r.waitingForReopen)
+    }
+    run { val r = Runner(); checkNotNull(r.session).binder.die(); rejects { r.observe() } }
+    run { val r = Runner(); r.reopen(); yes(r.ordinaryOpens == 0 && r.ledger.rejected == 1) }
+    run { val r = Runner(); r.arm(); r.events!!.revocation = Any(); r.session!!.binder.die(); rejects { r.observe() } }
+    run {
+        val r = Runner(); val old = r.session!!; val late = old.binder.recipient!!
+        val primary = IllegalStateException("scheduler failure")
+        val secondary = IllegalStateException("unlink failure")
+        r.stopFailure = primary; old.binder.unlinkFailure = secondary
+        try { r.closeForTest(); error("cleanup must fail") } catch (error: IllegalStateException) {
+            yes(error === primary); yes(error.suppressed.single() === secondary)
+        }
+        yes(r.session == null && r.binding == null && r.generation == 0L && r.snapshot == null)
+        late.binderDied(); yes(r.expectedBrokerDeath.json() == "null")
+    }
+    println("broker-death source-body checks=$checks passed")
+}

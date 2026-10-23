@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Wonad OS conformance</string>
+    <string name="control_status">Wonad OS conformance\n\n%1$s</string>
+    <string name="control_waiting">Wonad OS conformance\n\nWaiting for the signed instrumentation runner</string>
+    <string name="control_rejected">Rejected invalid conformance request</string>
+    <string name="launcher_status">Wonad API v3 conformance launcher\ncatalog %1$d</string>
+</resources>

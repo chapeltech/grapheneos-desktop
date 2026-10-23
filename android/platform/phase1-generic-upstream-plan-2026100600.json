@@ -1,0 +1,138 @@
+{
+  "classes": [
+    {
+      "applicability_definition": {
+        "path": "android/platform/phase1-grapheneos-host-applicability-2026100600.json",
+        "sha256": "658bc4ed825c17214107829e27659a4779b7dc4706123a61876aace9188374f7"
+      },
+      "class": "grapheneos_host",
+      "id": "grapheneos_applicable_host",
+      "state": "not_applicable_source_declared",
+      "result_protocol": "pinned-source-native-applicability-scan-v1",
+      "execution_profile": "read-only-authenticated-source-inventory-no-test-execution"
+    },
+    {
+      "class": "aosp_host",
+      "environment": {
+        "CC": "{source}/prebuilts/clang/host/linux-x86/clang-r584948/bin/clang",
+        "CGO_CFLAGS": "--sysroot {source}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/sysroot/",
+        "CGO_CPPFLAGS": "--sysroot {source}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/sysroot/",
+        "CGO_CXXFLAGS": "--sysroot {source}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/sysroot/",
+        "CGO_ENABLED": "1",
+        "CGO_LDFLAGS": "--sysroot {source}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/sysroot/ -B {source}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/lib/gcc/x86_64-linux/4.8.3 -L {source}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/lib/gcc/x86_64-linux/4.8.3 -L {source}/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8/x86_64-linux/lib64",
+        "CXX": "{source}/prebuilts/clang/host/linux-x86/clang-r584948/bin/clang++",
+        "DEBIAN_FRONTEND": "noninteractive",
+        "GOCACHE": "{test_out}/gocache",
+        "GOENV": "off",
+        "GOMODCACHE": "{test_out}/gomodcache",
+        "GOMAXPROCS": "4",
+        "GOMEMLIMIT": "40GiB",
+        "GOPATH": "{test_out}/gopath",
+        "GOPROXY": "off",
+        "GOROOT": "{source}/prebuilts/go/linux-x86",
+        "HOME": "{test_out}/home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "{source}/prebuilts/go/linux-x86/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "TMPDIR": "{test_out}/tmp",
+        "TZ": "UTC"
+      },
+      "execution_profile": "immutable-x86-builder-source-ro-fresh-test-out-network-none",
+      "id": "aosp_soong_go_host",
+      "invocations": [
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "./..."],
+          "cwd": "{source}/build/blueprint",
+          "id": "blueprint"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "-race", "-timeout", "30m", "-short", "./..."],
+          "cwd": "{source}/build/blueprint",
+          "id": "blueprint_race"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "./..."],
+          "cwd": "{source}/build/soong",
+          "id": "soong"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "-race", "-timeout", "30m", "-short", "./..."],
+          "cwd": "{source}/build/soong",
+          "id": "soong_race"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "./..."],
+          "cwd": "{source}/build/make/tools/canoninja",
+          "id": "canoninja"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "-race", "-timeout", "30m", "-short", "./..."],
+          "cwd": "{source}/build/make/tools/canoninja",
+          "id": "canoninja_race"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "./..."],
+          "cwd": "{source}/build/make/tools/compliance",
+          "id": "compliance"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "-race", "-timeout", "30m", "-short", "./..."],
+          "cwd": "{source}/build/make/tools/compliance",
+          "id": "compliance_race"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "./..."],
+          "cwd": "{source}/build/make/tools/rbcrun",
+          "id": "rbcrun"
+        },
+        {
+          "argv": ["{source}/prebuilts/go/linux-x86/bin/go", "test", "-json", "-count=1", "-p=1", "-race", "-timeout", "30m", "-short", "./..."],
+          "cwd": "{source}/build/make/tools/rbcrun",
+          "id": "rbcrun_race"
+        }
+      ],
+      "minimum_cases": 1,
+      "modules": [
+        {"go_mod_sha256": "c940e025c622a4628e79b45719357e37825acd6b39db338adedd52072f907ba1", "path": "build/blueprint", "project_commit": "7f2058de8155b05ea3c3f8317d33bfe732cacf8b"},
+        {"go_mod_sha256": "25261ea65b868bb6022e8c79b7443646dce86a2f4d29ce25d1cc92e68beceb33", "path": "build/soong", "project_commit": "250710f7f87acfbb8e3c517d90abde8b4a08fe1e"},
+        {"go_mod_sha256": "2b3b4e2389a53ba87a670c4266c82fac124378e9211bf82a83bc47365fd3859c", "path": "build/make/tools/canoninja", "project_commit": "b0f697df8cc9519408ca0a404e918cd51bde0735"},
+        {"go_mod_sha256": "ba93207664397f6fdf4d0afb9486025199b483205dd4ec7211255ea592d02e99", "path": "build/make/tools/compliance", "project_commit": "b0f697df8cc9519408ca0a404e918cd51bde0735"},
+        {"go_mod_sha256": "c7bb9d606d157e573f6005153029faf650830562077eb7454ea007bd6e9d27ff", "path": "build/make/tools/rbcrun", "project_commit": "b0f697df8cc9519408ca0a404e918cd51bde0735"}
+      ],
+      "result_protocol": "go-test-json-v1",
+      "source_definition": {
+        "path": "build/soong/scripts/run-soong-tests-with-go-tools.sh",
+        "sha256": "144bcc4e2ee7e1adf6b2d176ddd38d6e00cdbadd8542592c1866426ad95da9ac"
+      },
+      "source_tools": [
+        {"path": "prebuilts/go/linux-x86/bin/go", "sha256": "67be967c845fb2bb2de08d2a4b9f04a987decada6d799bf0547925caa2ab3257"},
+        {"path": "build/soong/scripts/get_clang_version.py", "sha256": "d8d0dba44664aec6f549041e3a9366c2ebec73bdbada955305fa047fd8cdd49f", "value": "clang-r584948"}
+      ],
+      "state": "resolved"
+    },
+    {
+      "class": "aosp_emulator",
+      "command": [
+        "python3", "android/tools/run_phase1_upstream_tests.py", "run",
+        "--role", "{role}", "--build-receipt", "{build_receipt}",
+        "--build-receipt-sha256", "{build_receipt_sha256}", "--plan",
+        "android/platform/phase1-upstream-tests-2026100600.json", "--test-out",
+        "{fresh_test_out}", "--output", "{fresh_output}"
+      ],
+      "execution_profile": "wonad-phase1-isolated-upstream-test-run-schema-2",
+      "id": "aosp_android_atest_emulator",
+      "minimum_cases": 324,
+      "module_plan": {
+        "path": "android/platform/phase1-upstream-tests-2026100600.json",
+        "sha256": "4c3a0e35509dd64330730b504892a8be748c9526ac875f3c67676535353cd65a"
+      },
+      "result_protocol": "wonad-isolated-atest-schema-2",
+      "runner": "android/tools/run_phase1_upstream_tests.py",
+      "state": "resolved"
+    }
+  ],
+  "kind": "wonad-phase1-generic-upstream-plan",
+  "policy": "matched-baseline-custom-native-machine-results-no-operator-commands",
+  "release": "2026100600",
+  "schema": 1
+}

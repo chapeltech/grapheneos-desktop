@@ -1,0 +1,100 @@
+diff --git a/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt b/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt
+--- a/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt
++++ b/quickstep/src/com/android/launcher3/taskbar/PerDisplayTaskbarResource.kt
+@@ -27,2 +27,3 @@
+-import android.os.Trace
++import android.os.Handler
++import android.os.Trace
+ import android.util.Log
+@@ -37,2 +38,3 @@
+-import com.android.launcher3.logging.RecreateTaskbarLatencyLogger
++import com.android.launcher3.logging.RecreateTaskbarLatencyLogger
++import com.android.launcher3.taskbar.customization.TaskbarFeatureEvaluator
+ import com.android.launcher3.util.Executors.UI_HELPER_EXECUTOR
+@@ -64,2 +66,36 @@
+-    private var isDestroyed = false
++    private var isDestroyed = false
++    private val readinessHandler = Handler(getTaskbarUiThread().looper)
++    private var pendingReadiness: Runnable? = null
++
++    /**
++     * Snapshot the exact display dependency before constructing a taskbar.
++     * Its repository and DisplayModel collect decoration changes independently.
++     * Never substitute the phone's evaluator when this display is not ready.
++     */
++    fun taskbarFeatureEvaluatorOrRetry(recreate: Runnable): TaskbarFeatureEvaluator? {
++        Preconditions.assertTaskbarUiThread()
++        pendingReadiness?.let { readinessHandler.removeCallbacks(it) }
++        pendingReadiness = null
++        if (isDestroyed) return null
++        val wm = windowContext.getSystemService(WindowManager::class.java)
++        if (wm == null || !wm.shouldShowSystemDecors(displayId)) {
++            removeTaskbarRootViewFromWindow()
++            return null
++        }
++        val evaluator = TaskbarFeatureEvaluator.INSTANCE.get(windowContext)[displayId]
++        // The native owner can change while the repository constructs the dependency.
++        if (!wm.shouldShowSystemDecors(displayId)) {
++            removeTaskbarRootViewFromWindow()
++            return null
++        }
++        if (evaluator != null) return evaluator
++        debugMsg("taskbar dependency not ready; deferring recreation")
++        val retry = Runnable {
++            pendingReadiness = null
++            if (!isDestroyed) recreate.run()
++        }
++        pendingReadiness = retry
++        readinessHandler.postDelayed(retry, 100)
++        return null
++    }
+ 
+@@ -226,3 +262,5 @@
+-    override fun cleanup() {
+-        isDestroyed = true
++    override fun cleanup() {
++        isDestroyed = true
++        pendingReadiness?.let { readinessHandler.removeCallbacks(it) }
++        pendingReadiness = null
+         debugMsg("destroy removeTaskbarRootViewFromWindow")
+diff --git a/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java b/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
+--- a/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
++++ b/quickstep/src/com/android/launcher3/taskbar/TaskbarManagerImpl.java
+@@ -815,2 +815,9 @@
++            if (resource.isExternalDisplay()
++                    && (wm == null || !wm.shouldShowSystemDecors(displayId))) {
++                taskbar.onDestroy();
++                taskbar = null;
++                resource.removeTaskbarRootViewFromWindow();
++                return;
++            }
+             FrameLayout taskbarRootLayout = resource.getRootLayout();
+             resource.debugMsg("recreateTaskbarForDisplay: adding root layout");
+@@ -1082,2 +1082,9 @@
+-            Context navigationBarPanelContext = mBaseContext.createWindowContext(display,
++            var evaluator = resource.isExternalDisplay()
++                    ? resource.taskbarFeatureEvaluatorOrRetry(() -> recreateTaskbarForDisplay(
++                            resource, 0, "displayDependencyReady")) : null;
++            if (resource.isExternalDisplay() && evaluator == null) {
++                return null;
++            }
++
++            Context navigationBarPanelContext = mBaseContext.createWindowContext(display,
+                     TYPE_NAVIGATION_BAR_PANEL, null);
+@@ -1098,2 +1105,2 @@
+-                            mSystemUiProxy, mActivityManagerWrapper, mDesktopState);
++                            mSystemUiProxy, mActivityManagerWrapper, mDesktopState, evaluator);
+             mAmbientCueRepository = taskbarActivityContext.getControllers().cueBarController
+diff --git a/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java b/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java
+--- a/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java
++++ b/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java
+@@ -337,2 +337,3 @@
+-            ActivityManagerWrapper activityManagerWrapper, DesktopState desktopState) {
++            ActivityManagerWrapper activityManagerWrapper, DesktopState desktopState,
++            @Nullable TaskbarFeatureEvaluator preparedEvaluator) {
+         super(windowContext, displayId, isPrimaryDisplay);
+@@ -339,2 +340,3 @@
+-        mTaskbarFeatureEvaluator = getActivityComponent().getTaskbarFeatureEvaluator();
++        mTaskbarFeatureEvaluator = preparedEvaluator != null ? preparedEvaluator
++                : getActivityComponent().getTaskbarFeatureEvaluator();
+         mIsTransient = mTaskbarFeatureEvaluator.isTransient();
