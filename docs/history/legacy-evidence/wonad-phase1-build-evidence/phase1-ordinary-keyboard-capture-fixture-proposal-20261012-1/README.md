@@ -1,0 +1,28 @@
+# Ordinary keyboard-capture fixture proposal (source only)
+
+Six proposed repository targets: the existing fixture manifest, three new production Kotlin files and two new Kotlin/JUnit sources. No Java/OS/SDK/Gradle/signing configuration is changed. Package remains org.wonad.fixture, minSdk30/compileSdk35/targetSdk35, ordinary existing fixture signing authority; no shared/system UID, hidden-API privilege, direct secure-setting write or permission seeding is added. The only added permission is the source-defined normal, feature-flagged android.permission.CAPTURE_KEYBOARD. A future actual installed-package audit must still prove ordinary UID/signer/permission and feature support.
+
+The new Activity is independent of existing FixtureActivity.java, which records typed text. It has no EditText, key-code history, character data, persistence, Log calls or exception-message logging. Only bounded aggregate DOWN/UP/Escape/repeat/canceled counts (limit1,000,000), fixed role/component/task/display/process/focus/lifecycle identity and public API status are cached for visible UI/dumpsys. A saturated counter is explicit; future runtime evidence must reject it for exact delta assertions. New task affinities/standard documentLaunchMode=always give three independently launchable document components in the SAME ordinary UID, deliberately exposing wrong-global-task/UID-only targeting:
+
+| Component | Launcher label | Intended actual placement |
+| --- | --- | --- |
+| .KeyboardCaptureOneActivity | Wonad keyboard capture one | Claimed external display3, initial target A |
+| .KeyboardCapturePhoneActivity | Wonad keyboard capture phone | Regular phone display0, distinct task B |
+| .KeyboardCaptureTwoActivity | Wonad keyboard capture two | Other claimed external display4, distinct task C |
+
+Placement is not inferred from the component name; future evidence must retain actual task/instance/UID/display and WMS focus records. These tasks do not set their own display or call privileged task-management APIs.
+
+Capture defaults OFF and ON requires the visible Enable keyboard capture button. Disable and Reset key counters are separate visible controls. Only LayoutParams's PUBLIC setKeyboardCaptureEnabled(boolean)/hasKeyboardCapture() are resolved with getMethod. No setAccessible, private inputFeatures bit access, getDeclared* reflection or fallback injection exists. Missing APIs, normal-permission denial, invocation/update failures and attribute mismatch have explicit statuses. Fatal JVM failures are not converted to a positive result. Successful ATTRIBUTES_APPLIED means only requested/current app-side attributes agree—not that system_server honored capture. actual_system_capture_proven is always false in the fixture record. Live window input configuration and genuine delivered-key observations are needed to establish actual capture.
+
+The public window-token local identity is only an app-process correlation hint. It is NOT the InputDispatcher initial focused-input token. That authoritative token must come from sealed WMS/input evidence. Producer confirms its endpoint candidate checks exact window/input-token/activity/task/UID/display/claim, current targetDC focus, global topFocusedDisplayContent and getFocusedWindowLocked, plus topRunningActivity. Merely retaining targetDC's focus is insufficient when the phone or another display becomes globally focused.
+
+Future dedicated runtime controls, after fresh source review/fixture build/packet/image/VM authorization:
+
+1. Prove normal capture OFF baseline on each actual task. Enable A through genuine UI; retain API status, normal permission, actual focused window/input configuration and real bounded key-counter deltas. Unsupported/unavailable/error states are coverage unavailable, never a capture PASS.
+2. Healthy positive: genuine delayed Escape while A remains the exact current focused target should affect only A according to the reviewed endpoint contract. Task B/C must remain distinct/alive. No APK private endpoint call substitutes for real keyboard routing.
+3. Stale-focus negatives: after the initial external Escape but before its delayed effect, focus B on phone0, or C on another external monitor. Capture actual global/native focus chronology. Neither the newly focused task nor the old now-unfocused A may be removed by that stale external ticket. WMS/private-controller evidence, not a fixture flag, establishes this.
+4. Exact same-UID replacement, window recreation/task reparenting, retired/blocked/dead claim, user transition and repeated DOWN/UP/canceled/missing-UP controls belong in the actual runtime campaign. Preserve stock phone/unclaimed Escape and quick phone Recents/Meta/Caps behavior. The companion concurrency note records queue/endpoint/census counterexamples; no final successor implementation is approved by this source proposal.
+
+Current verification is ONLY12 Python source/XML checks. The13 new Kotlin/JUnit methods are declared but have NOT been compiled or run. No Kotlin/Android/Gradle/APK/Dex/lint/Docker/VM/key generation/install/signing/runtime work was performed. This is neither an installable APK nor qualification.
+
+Build integration is deliberately pending: existing build-fixture5.py pins23 inputs,28 JVM cases,13 activities and11 launchers and cannot consume these additions unchanged. A future reviewed fixture generation must bind all five new files + modified manifest, the new total16 activities/14 launchers, exact JVM inventory, actual compileSdk35 tools and ordinary signer. Preserve old fixture5/packet8/image evidence; do not patch fixed counts or relabel existing binary receipts to claim this source compiled. The regular module Gradle file remains byte-identical.

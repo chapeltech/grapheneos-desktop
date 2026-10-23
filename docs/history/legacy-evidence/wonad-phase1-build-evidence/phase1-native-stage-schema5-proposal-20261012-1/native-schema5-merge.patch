@@ -1,0 +1,714 @@
+--- a/android/platform/stage-os.py
++++ b/android/platform/stage-os.py
+@@ -171,11 +171,9 @@
+     if marker_path.is_symlink() or not marker_path.is_file():
+         raise ValueError("Staged Wonad source marker is missing or symlinked")
+     marker = json.loads(marker_path.read_text())
+-    expected_fields = {"schema", "frameworks_revision", "launcher3_revision",
+-                       "emulator_goldfish_revision",
+-                       "signer_sha256", "signer_certificate", "files", "patches",
+-                       "platform_targets", "tools"}
+-    if not isinstance(marker, dict) or set(marker) != expected_fields or marker.get("schema") != 4:
++    expected_fields = stage_contract.marker_fields()
++    stage_contract.require_stage_schema(marker)
++    if set(marker) != expected_fields:
+         raise ValueError("Unexpected Wonad stage marker schema")
+     lock = json.loads((ROOT / "android/grapheneos.lock.json").read_text())
+     repositories = {
+@@ -187,11 +185,19 @@
+                               lock["emulator_goldfish"]["commit"],
+                               stage_contract.EMULATOR_PATCH_NAMES),
+     }
++    if stage_contract.NATIVE_PATCH_NAMES:
++        repositories["frameworks_native"] = (
++            source / stage_contract.NATIVE_PROJECT,
++            stage_contract.authenticated_native_revision(source, lock),
++            stage_contract.NATIVE_PATCH_NAMES)
+     if (marker["frameworks_revision"] != repositories["frameworks_base"][1] or
+             marker["launcher3_revision"] != repositories["launcher3"][1] or
+             marker["emulator_goldfish_revision"] != repositories["emulator_goldfish"][1] or
+             re.fullmatch(r"[0-9a-f]{64}", str(marker["signer_sha256"])) is None):
+         raise ValueError("Wonad stage marker differs from the authenticated pins")
++    if (stage_contract.NATIVE_PATCH_NAMES and
++            marker["frameworks_native_revision"] != repositories["frameworks_native"][1]):
++        raise ValueError("Native stage marker differs from the authenticated manifest pin")
+     certificate = marker["signer_certificate"]
+     if (not isinstance(certificate, dict) or set(certificate) != {"path", "sha256", "size"} or
+             certificate.get("path") != "WonadReleaseCertificate.der" or
+@@ -215,7 +221,8 @@
+                                          text=True).strip()
+         if actual != revision:
+             raise ValueError(f"{name} revision differs from the authenticated source pin")
+-        verify_targets(repository, marker["platform_targets"][name], name)
++        if patch_names:
++            verify_targets(repository, marker["platform_targets"][name], name)
+     staged_root = marker_path.parent
+     files = marker["files"]
+     if not isinstance(files, dict) or not files:
+@@ -276,6 +283,23 @@
+     emulator_changes = framework_plan(emulator, emulator_patches)
+     emulator_targets = target_hashes(emulator, emulator_patches, emulator_changes)
+     emulator_patch_ledger = stage_contract.patch_ledger(stage_contract.EMULATOR_PATCH_NAMES)
++
++    native_changes = []
++    native_patch_ledger = None
++    native_targets = None
++    native_expected = None
++    if stage_contract.NATIVE_PATCH_NAMES:
++        lock = json.loads((ROOT / "android/grapheneos.lock.json").read_text())
++        native_expected = stage_contract.authenticated_native_revision(source, lock)
++        native = source / stage_contract.NATIVE_PROJECT
++        native_revision = subprocess.check_output(
++            ["git", "-C", str(native), "rev-parse", "HEAD"], text=True).strip()
++        if native_revision != native_expected:
++            raise ValueError("Native revision differs from the authenticated manifest pin")
++        native_patches = stage_contract.patches(stage_contract.NATIVE_PATCH_NAMES)
++        native_patch_ledger = stage_contract.patch_ledger(stage_contract.NATIVE_PATCH_NAMES)
++        native_changes = framework_plan(native, native_patches)
++        native_targets = target_hashes(native, native_patches, native_changes)
+ 
+     files = {"Android.bp": ROOT / "android/os-integration/Android.bp", "LICENSE": ROOT / "LICENSE"}
+     for relative, suffix in (("broker-rust/src", ".rs"), ("broker-jni/src", ".rs"), ("input-jni/src", ".rs"),
+@@ -333,7 +357,7 @@
+     hashes = {name: digest(target / name) for name in
+               [*files, "WonadSigning.kt", "WonadReleaseCertificate.der",
+                "generated-res/values/wonad_signer.xml"]}
+-    manifest = json.dumps({"schema": 4, "frameworks_revision": expected,
++    marker_value = {"schema": stage_contract.stage_schema(), "frameworks_revision": expected,
+                            "launcher3_revision": launcher_expected,
+                            "emulator_goldfish_revision": emulator_expected,
+                            "signer_sha256": signer,
+@@ -351,8 +375,13 @@
+                                "launcher3": launcher_targets,
+                                "emulator_goldfish": emulator_targets,
+                            },
+-                           "tools": release_tool_ledger}, indent=2, sort_keys=True) + "\n"
+-    changes = framework_changes + launcher_changes + emulator_changes
++                           "tools": release_tool_ledger}
++    if stage_contract.NATIVE_PATCH_NAMES:
++        marker_value["frameworks_native_revision"] = native_expected
++        marker_value["patches"]["frameworks_native"] = native_patch_ledger
++        marker_value["platform_targets"]["frameworks_native"] = native_targets
++    manifest = json.dumps(marker_value, indent=2, sort_keys=True) + "\n"
++    changes = framework_changes + launcher_changes + emulator_changes + native_changes
+     if any((path.read_bytes() if path.exists() else None) != before for path, before, after in changes):
+         raise ValueError("Platform source changed during staging; preserving newer edits")
+     for path, before, after in changes:
+@@ -361,11 +390,17 @@
+     verify_targets(frameworks, framework_targets, "frameworks_base")
+     verify_targets(launcher, launcher_targets, "launcher3")
+     verify_targets(emulator, emulator_targets, "emulator_goldfish")
++    if stage_contract.NATIVE_PATCH_NAMES:
++        verify_targets(native, native_targets, "frameworks_native")
+     if (framework_patch_ledger != stage_contract.patch_ledger(stage_contract.FRAMEWORK_PATCH_NAMES) or
+             launcher_patch_ledger != stage_contract.patch_ledger(stage_contract.LAUNCHER_PATCH_NAMES) or
+             emulator_patch_ledger != stage_contract.patch_ledger(stage_contract.EMULATOR_PATCH_NAMES) or
+             release_tool_ledger != stage_contract.tool_ledger()):
+         raise ValueError("Owned patch or release tool changed during staging")
++    if (stage_contract.NATIVE_PATCH_NAMES and
++            (native_patch_ledger != stage_contract.patch_ledger(stage_contract.NATIVE_PATCH_NAMES) or
++             native_expected != stage_contract.authenticated_native_revision(source, lock))):
++        raise ValueError("Owned native patch or authenticated manifest changed during staging")
+     if not marker.exists() or marker.read_text() != manifest:
+         marker.write_text(manifest)
+     print(f"Staged {len(hashes)} owned sources under {target}; authority stays disabled by default")
+--- a/android/tools/frankel_build_comparison.py
++++ b/android/tools/frankel_build_comparison.py
+@@ -33,6 +33,7 @@
+ import release_receipt  # noqa: E402
+ import x86_build_comparison as x86  # noqa: E402
+ import docker_locality_proof as locality  # noqa: E402
++import stage_contract  # noqa: E402
+ 
+ 
+ LOCK = ANDROID / "grapheneos.lock.json"
+@@ -517,10 +518,10 @@
+             updater = release_receipt.read_updater_marker(source, lock)
+         except (ValueError, release_receipt.ReceiptError, OSError) as error:
+             raise ComparisonError(f"Custom stage verification failed: {error}") from error
+-        require(marker.get("schema") == 4 and marker.get("signer_sha256") == signer["der_sha256"],
++        require(marker.get("schema") == stage_contract.stage_schema() and marker.get("signer_sha256") == signer["der_sha256"],
+                 "Schema-4 stage signer differs from the selected public certificate")
+         stage = {
+-            "state": "schema-4-with-project-updater",
++            "state": f"schema-{stage_contract.stage_schema()}-with-project-updater",
+             "marker": marker,
+             "marker_ref": ordinary_ref(marker_path),
+             "signer": signer,
+@@ -1178,6 +1179,30 @@
+                 value, label=f"Frankel project {path}")
+         except provenance.ProvenanceError as error:
+             raise ComparisonError(str(error)) from error
++    stage = source["stage"]
++    if stage != {"state": "absent"}:
++        require(stage.get("state") == f"schema-{stage_contract.stage_schema()}-with-project-updater",
++                "Frankel custom source has the wrong active stage schema")
++        marker = stage.get("marker")
++        owned = marker_owned_targets(marker)
++        if stage_contract.NATIVE_PATCH_NAMES:
++            require(marker["frameworks_native_revision"] == stage_contract.native_revision_from_projects(pin["projects"]),
++                    "Native Frankel revision differs from authenticated source project ledger")
++        changed = source["owned_tracked_changes"]
++        generated = source["generated_inputs"]
++        updater_path = "packages/apps/Updater/res/values/config.xml"
++        owned[updater_path] = stage["updater"]["configured_sha256"]
++        require(set(changed) <= set(owned), "Frankel tracked targets are outside the active owned stage")
++        expected_generated = {
++            "external/wonad/.wonad-stage.json", ".wonad-updater-stage.json",
++            *("external/wonad/" + safe_relative(name).as_posix() for name in marker["files"]),
++            *(VENDOR_ROOT.as_posix() + "/" + safe_relative(name).as_posix() for name in source["vendor"]["files"]),
++        } | (set(owned) - set(changed))
++        require(set(generated) == expected_generated, "Frankel generated inventory differs from its exact owned partition")
++        for name, digest in owned.items():
++            row = changed.get(name) or generated.get(name)
++            require(isinstance(row, dict) and row.get("sha256") == digest,
++                    "Frankel tracked/generated native or platform target differs from its marker: " + name)
+     return source
+ 
+ 
+@@ -1262,7 +1287,7 @@
+     require(baseline["source"]["vendor"] == custom["source"]["vendor"],
+             "Baseline/custom generated Frankel vendor tree differs")
+     require(baseline["source"]["stage"] == {"state": "absent"} and
+-            custom["source"]["stage"]["state"] == "schema-4-with-project-updater",
++            custom["source"]["stage"]["state"] == f"schema-{stage_contract.stage_schema()}-with-project-updater",
+             "Baseline/custom staging roles differ")
+     paths = [Path(baseline["locations"]["source"]), Path(custom["locations"]["source"]),
+              Path(baseline["locations"]["out_dir"]), Path(custom["locations"]["out_dir"])]
+--- a/android/tools/phase1_provenance.py
++++ b/android/tools/phase1_provenance.py
+@@ -29,6 +29,7 @@
+ import tempfile
+ import xml.etree.ElementTree as ET
+ import zipfile
++import stage_contract
+ 
+ 
+ ROOT = Path(__file__).resolve().parents[2]
+@@ -1310,19 +1311,10 @@
+ def owned_targets(source: Path):
+     marker_path = source / "external/wonad/.wonad-stage.json"
+     marker = load_json(marker_path)
+-    require(marker.get("schema") == 4 and isinstance(marker.get("platform_targets"), dict),
+-            "Wonad stage schema 4 with target inventory is required")
+-    expected = {"frameworks_base": "frameworks/base", "launcher3": "packages/apps/Launcher3",
+-                "emulator_goldfish": "device/generic/goldfish"}
+-    require(set(marker["platform_targets"]) == set(expected), "Wonad target inventory is incomplete")
+-    result = {}
+-    for label, project in expected.items():
+-        values = marker["platform_targets"][label]
+-        require(isinstance(values, dict) and values, f"Missing {label} owned targets")
+-        for name, digest in values.items():
+-            relative = safe_relative(name)
+-            require(SHA256.fullmatch(str(digest)), f"Invalid owned target digest: {name}")
+-            result[f"{project}/{relative.as_posix()}"] = digest
++    try:
++        result = stage_contract.marker_owned_targets(marker)
++    except ValueError as error:
++        raise ProvenanceError(str(error)) from error
+     result["packages/apps/Updater/res/values/config.xml"] = None
+     return result
+ 
+--- a/android/tools/phase1_release_index.py
++++ b/android/tools/phase1_release_index.py
+@@ -640,11 +640,12 @@
+ 
+ def x86_stage(receipt):
+     stage = receipt.get("source", {}).get("stage", {})
+-    require(stage.get("state") == "schema-4-owned-stage" and
++    require(stage.get("state") == f"schema-{x86.stage_contract.stage_schema()}-owned-stage" and
+             stage.get("qualification") == "emulator-development-only" and
+             isinstance(stage.get("marker"), dict),
+-            "x86 custom receipt lacks development-only schema-4 staging")
++            "x86 custom receipt lacks development-only active-schema staging")
+     signer = stage.get("development_certificate", {}).get("der_sha256")
++    x86.marker_owned_targets(stage["marker"])
+     require(SHA256.fullmatch(str(signer or "")) and
+             stage["marker"].get("signer_sha256") == signer,
+             "x86 staged signer identity is inconsistent")
+@@ -653,10 +654,11 @@
+ 
+ def arm_stage(receipt):
+     stage = receipt.get("source", {}).get("stage", {})
+-    require(stage.get("state") == "schema-4-with-project-updater" and
++    require(stage.get("state") == f"schema-{frankel.stage_contract.stage_schema()}-with-project-updater" and
+             isinstance(stage.get("marker"), dict),
+-            "ARM custom receipt lacks production schema-4/Updater staging")
++            "ARM custom receipt lacks production active-schema/Updater staging")
+     signer = stage.get("signer", {}).get("der_sha256")
++    x86.marker_owned_targets(stage["marker"])
+     require(SHA256.fullmatch(str(signer or "")) and
+             stage["marker"].get("signer_sha256") == signer,
+             "ARM staged signer identity is inconsistent")
+--- a/android/tools/release_receipt.py
++++ b/android/tools/release_receipt.py
+@@ -247,6 +247,12 @@
+                 "signing_key_fingerprint": lock[name]["signing_key_fingerprint"],
+             })
+         result[name] = row
++    if stage_contract.NATIVE_PATCH_NAMES:
++        expected = stage_contract.authenticated_native_revision(source, lock)
++        actual = revision(source / stage_contract.NATIVE_PROJECT)
++        if actual != expected:
++            raise ReceiptError("Native revision differs from its authenticated manifest pin")
++        result["frameworks_native"] = {"commit": actual, "manifest_path": stage_contract.NATIVE_PROJECT}
+     return result
+ 
+ 
+@@ -269,13 +275,14 @@
+     if marker_path.is_symlink() or not marker_path.is_file():
+         raise ReceiptError("Staged Wonad source marker is missing or symlinked")
+     marker = load_json(marker_path)
+-    require_keys(marker, {"schema", "frameworks_revision", "launcher3_revision",
+-                          "emulator_goldfish_revision",
+-                          "signer_sha256", "signer_certificate", "files", "patches",
+-                          "platform_targets", "tools"}, "Wonad stage marker")
++    require_keys(marker, stage_contract.marker_fields(), "Wonad stage marker")
++    try:
++        stage_contract.require_stage_schema(marker)
++    except ValueError as error:
++        raise ReceiptError(str(error)) from error
+     files = validate_sha_map(marker["files"], "Wonad staged files")
+     signer = marker["signer_sha256"]
+-    if (marker["schema"] != 4 or marker["frameworks_revision"] != lock["frameworks_base"]["commit"] or
++    if (marker["schema"] != stage_contract.stage_schema() or marker["frameworks_revision"] != lock["frameworks_base"]["commit"] or
+             marker["launcher3_revision"] != lock["launcher3"]["commit"] or
+             marker["emulator_goldfish_revision"] != lock["emulator_goldfish"]["commit"] or
+             not isinstance(signer, str) or SHA256.fullmatch(signer) is None):
+@@ -285,23 +292,35 @@
+         "launcher3": stage_contract.patch_ledger(stage_contract.LAUNCHER_PATCH_NAMES),
+         "emulator_goldfish": stage_contract.patch_ledger(stage_contract.EMULATOR_PATCH_NAMES),
+     }
++    if stage_contract.NATIVE_PATCH_NAMES:
++        if marker["frameworks_native_revision"] != stage_contract.authenticated_native_revision(source, lock):
++            raise ReceiptError("Native stage revision differs from its authenticated manifest")
++        expected_patches["frameworks_native"] = stage_contract.patch_ledger(stage_contract.NATIVE_PATCH_NAMES)
+     if marker["patches"] != expected_patches:
+         raise ReceiptError("Wonad stage patch order or digest differs from the release source")
+     if marker["tools"] != stage_contract.tool_ledger():
+         raise ReceiptError("Wonad stage tool identity differs from the release source")
+     targets = marker["platform_targets"]
+-    if not isinstance(targets, dict) or set(targets) != {
+-            "frameworks_base", "launcher3", "emulator_goldfish"}:
++    if not isinstance(targets, dict) or set(targets) != set(stage_contract.platform_lanes()):
+         raise ReceiptError("Wonad stage platform target inventory is incomplete")
+-    repositories = {"frameworks_base": source / "frameworks/base",
+-                    "launcher3": source / "packages/apps/Launcher3",
+-                    "emulator_goldfish": source / "device/generic/goldfish"}
++    repositories = {label: source / path for label, (path, names, field) in stage_contract.platform_lanes().items()}
++    try:
++        stage_contract.marker_owned_targets(marker)
++    except ValueError as error:
++        raise ReceiptError(str(error)) from error
+     normalized_targets = {}
+     for repository_name, values in targets.items():
+-        values = validate_sha_map(values, f"{repository_name} owned platform targets")
++        patch_names = stage_contract.platform_lanes()[repository_name][1]
++        if patch_names:
++            values = validate_sha_map(values, f"{repository_name} owned platform targets")
++        elif values != {}:
++            raise ReceiptError("Targets declared under an empty registered patch lane")
+         repository = repositories[repository_name]
+         for name, expected in values.items():
+             path = repository / name
++            if any(repository.joinpath(*Path(name).parts[:i]).is_symlink()
++                   for i in range(1, len(Path(name).parts) + 1)):
++                raise ReceiptError(f"Symlinked owned {repository_name} target: {name}")
+             if path.is_symlink() or not path.is_file() or hash_file(path)["sha256"] != expected:
+                 raise ReceiptError(f"Owned {repository_name} target differs from marker: {name}")
+         normalized_targets[repository_name] = values
+@@ -321,11 +340,11 @@
+     if hash_file(actual[certificate["path"]])["size"] != certificate["size"]:
+         raise ReceiptError("Staged Wonad signer certificate size differs from marker")
+     reference = hash_file(marker_path)
+-    return {
++    result = {
+         "path": STAGE_MARKER.as_posix(),
+         "sha256": reference["sha256"],
+         "size": reference["size"],
+-        "schema": 4,
++        "schema": stage_contract.stage_schema(),
+         "frameworks_revision": marker["frameworks_revision"],
+         "launcher3_revision": marker["launcher3_revision"],
+         "emulator_goldfish_revision": marker["emulator_goldfish_revision"],
+@@ -336,6 +355,9 @@
+         "platform_targets": normalized_targets,
+         "tools": marker["tools"],
+     }
++    if stage_contract.NATIVE_PATCH_NAMES:
++        result["frameworks_native_revision"] = marker["frameworks_native_revision"]
++    return result
+ 
+ 
+ def verify_release_worktree(source: Path, stage):
+@@ -346,6 +368,8 @@
+         "device/generic/goldfish": set(stage["platform_targets"]["emulator_goldfish"]),
+         "packages/apps/Updater": {"res/values/config.xml"},
+     }
++    if stage_contract.NATIVE_PATCH_NAMES:
++        allowed[stage_contract.NATIVE_PROJECT] = set(stage["platform_targets"]["frameworks_native"])
+     try:
+         result = verify_checkout.verify(source, jobs=32, allowed_changes=allowed)
+     except (ValueError, OSError, subprocess.SubprocessError) as error:
+@@ -527,8 +551,16 @@
+         "packages/apps/Updater": source_pins["updater"]["commit"],
+         "device/generic/goldfish": source_pins["emulator_goldfish"]["commit"],
+     }
++    if stage_contract.NATIVE_PATCH_NAMES:
++        expected_projects[stage_contract.NATIVE_PROJECT] = source_pins["frameworks_native"]["commit"]
+     if any(project_revisions.get(path) != revision for path, revision in expected_projects.items()):
+         raise ReceiptError("Phase-1 project ledger differs from receipted source pins")
++    if stage_contract.NATIVE_PATCH_NAMES:
++        for name, digest in stage["platform_targets"]["frameworks_native"].items():
++            qualified = stage_contract.NATIVE_PROJECT + "/" + safe_relative(name).as_posix()
++            row = source_record["owned_tracked_changes"].get(qualified) or source_record["generated_inputs"].get(qualified)
++            if not isinstance(row, dict) or row.get("sha256") != digest:
++                raise ReceiptError("Native target differs from the release source freeze: " + name)
+     phase1_tool = stage["tools"].get("android/tools/phase1_provenance.py")
+     if (source_record["generator"]["sha256"] != phase1_tool or
+             source_record["builder"]["dockerfile"]["sha256"] !=
+@@ -696,11 +728,8 @@
+                 SHA256.fullmatch(row["sha256"]) is None or type(row["size"]) is not int or row["size"] <= 0):
+             raise ReceiptError(f"Invalid {field.replace('_', ' ')} identity")
+     stage = receipt["wonad_stage"]
+-    stage_fields = {"path", "sha256", "size", "schema", "frameworks_revision",
+-                    "launcher3_revision", "emulator_goldfish_revision",
+-                    "signer_sha256", "signer_certificate",
+-                    "files", "patches", "platform_targets", "tools"}
+-    if (not isinstance(stage, dict) or set(stage) != stage_fields or stage.get("schema") != 4 or
++    stage_fields = stage_contract.marker_fields() | {"path", "sha256", "size"}
++    if (not isinstance(stage, dict) or set(stage) != stage_fields or stage.get("schema") != stage_contract.stage_schema() or
+             stage.get("signer_sha256") != signer):
+         raise ReceiptError("Wonad stage marker and APK signer identity differ")
+     if (not isinstance(stage.get("sha256"), str) or SHA256.fullmatch(stage["sha256"]) is None or
+@@ -714,25 +743,35 @@
+             certificate.get("sha256") != signer or type(certificate.get("size")) is not int or
+             certificate["size"] < 128 or stage["files"].get(certificate["path"]) != signer):
+         raise ReceiptError("Invalid receipted Wonad signer certificate")
+-    if not isinstance(stage.get("patches"), dict) or set(stage["patches"]) != {
+-            "frameworks_base", "launcher3", "emulator_goldfish"}:
++    if not isinstance(stage.get("patches"), dict) or set(stage["patches"]) != set(stage_contract.platform_lanes()):
+         raise ReceiptError("Invalid receipted patch ledger")
+     for name, rows in stage["patches"].items():
+-        if (not isinstance(rows, list) or not rows or any(
++        patch_names = stage_contract.platform_lanes()[name][1]
++        if (not isinstance(rows, list) or (patch_names and not rows) or
++                (not patch_names and rows) or any(
+                 not isinstance(row, dict) or set(row) != {"name", "sha256"} or
+                 safe_relative(row["name"]).name != row["name"] or
+                 not isinstance(row["sha256"], str) or SHA256.fullmatch(row["sha256"]) is None
+                 for row in rows)):
+             raise ReceiptError(f"Invalid receipted {name} patch ledger")
+     if (not isinstance(stage.get("platform_targets"), dict) or
+-            set(stage["platform_targets"]) != {"frameworks_base", "launcher3", "emulator_goldfish"}):
++            set(stage["platform_targets"]) != set(stage_contract.platform_lanes())):
+         raise ReceiptError("Invalid receipted platform target inventory")
+     for name, values in stage["platform_targets"].items():
+-        validate_sha_map(values, f"receipted {name} target inventory")
++        if stage_contract.platform_lanes()[name][1]:
++            validate_sha_map(values, f"receipted {name} target inventory")
++        elif values != {}:
++            raise ReceiptError("Receipted targets under an empty registered patch lane")
++    try:
++        stage_contract.marker_owned_targets({name: stage[name] for name in stage_contract.marker_fields()})
++    except ValueError as error:
++        raise ReceiptError(str(error)) from error
+     validate_sha_map(stage.get("tools"), "receipted release tools")
+     source = receipt["source"]
+-    if not isinstance(source, dict) or set(source) != {
+-            "manifest", "frameworks_base", "launcher3", "updater", "emulator_goldfish"}:
++    expected_source = {"manifest", "frameworks_base", "launcher3", "updater", "emulator_goldfish"}
++    if stage_contract.NATIVE_PATCH_NAMES:
++        expected_source.add("frameworks_native")
++    if not isinstance(source, dict) or set(source) != expected_source:
+         raise ReceiptError("Incomplete pinned source identity")
+     for name in source:
+         row = source[name]
+@@ -744,6 +783,13 @@
+             not isinstance(receipt["updater_stage"], dict) or
+             receipt["updater_stage"].get("updater_revision") != source["updater"]["commit"]):
+         raise ReceiptError("Source pins and ownership markers are inconsistent")
++    if stage_contract.NATIVE_PATCH_NAMES:
++        native_pin = source["frameworks_native"]
++        if (set(native_pin) != {"commit", "manifest_path"} or
++                native_pin["manifest_path"] != stage_contract.NATIVE_PROJECT or
++                native_pin["commit"] != stage_contract.NATIVE_MANIFEST_REVISION or
++                stage["frameworks_native_revision"] != native_pin["commit"]):
++            raise ReceiptError("Native stage/source pin differs from its authenticated manifest project")
+     provenance = receipt["phase1_provenance"]
+     require_keys(provenance, {"selected_target", "source_record", "client_record",
+                               "build_execution", "build_bind_proof",
+--- a/android/tools/run_frankel_build.py
++++ b/android/tools/run_frankel_build.py
+@@ -433,9 +433,9 @@
+                 not snapshot["owned_tracked_changes"],
+                 "Baseline source audit did not prove a clean stock source plus exact vendor tree")
+     else:
+-        require(snapshot["stage"].get("state") == "schema-4-with-project-updater" and
+-                snapshot["stage"].get("marker", {}).get("schema") == 4,
+-                "Custom source lacks exact schema-4 and project Updater staging")
++        require(snapshot["stage"].get("state") == f"schema-{comparison.stage_contract.stage_schema()}-with-project-updater" and
++                snapshot["stage"].get("marker", {}).get("schema") == comparison.stage_contract.stage_schema(),
++                "Custom source lacks exact active-schema and project Updater staging")
+     return snapshot, toolchain
+ 
+ 
+--- a/android/tools/run_x86_build.py
++++ b/android/tools/run_x86_build.py
+@@ -3,7 +3,7 @@
+ 
+ This is deliberately a launcher, not a source preparation tool.  A baseline
+ checkout must already be pristine.  A custom checkout must already contain the
+-exact schema-4 Wonad stage.  The launcher never stages, repairs, resumes, or
++exact active-schema Wonad stage.  The launcher never stages, repairs, resumes, or
+ removes either checkout, output, log, or retained build container.
+ """
+ 
+@@ -287,7 +287,7 @@
+         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 text=True, timeout=600)
+     except (OSError, subprocess.TimeoutExpired) as error:
+-        raise LauncherError(f"Cannot verify the custom schema-4 stage: {error}") from error
++        raise LauncherError(f"Cannot verify the custom active-schema stage: {error}") from error
+     require(result.returncode == 0 and
+             "PASS: exact owned Wonad stage, patches, targets and tools verified" in result.stdout,
+             "Custom stage-os verification failed: " + result.stdout)
+@@ -318,7 +318,8 @@
+     else:
+         stage = snapshot.get("stage", {})
+         marker = stage.get("marker", {})
+-        require(stage.get("state") == "schema-4-owned-stage" and marker.get("schema") == 4 and
++        require(stage.get("state") == f"schema-{comparison.stage_contract.stage_schema()}-owned-stage" and
++                marker.get("schema") == comparison.stage_contract.stage_schema() and
+                 isinstance(marker.get("patches", {}).get("emulator_goldfish"), list) and
+                 marker["patches"]["emulator_goldfish"] and
+                 isinstance(marker.get("platform_targets", {}).get("emulator_goldfish"), dict) and
+--- a/android/tools/stage_contract.py
++++ b/android/tools/stage_contract.py
+@@ -5,6 +5,9 @@
+ 
+ import hashlib
+ from pathlib import Path, PurePosixPath
++import re
++import subprocess
++import xml.etree.ElementTree as ET
+ 
+ 
+ ROOT = Path(__file__).resolve().parents[2]
+@@ -52,6 +55,112 @@
+     "emulator-meta-keys.patch",
+ )
+ 
++# Populate only after reviewing the native producer's actual patch bytes.
++# Empty does not authorize a marker containing an undeclared native lane.
++NATIVE_PATCH_NAMES = ()
++NATIVE_PROJECT = "frameworks/native"
++NATIVE_MANIFEST_REVISION = "1c83ac6ae533c74ecb0486369c0d2f9e79783b3d"
++
++
++def stage_schema() -> int:
++    return 5 if NATIVE_PATCH_NAMES else 4
++
++
++def platform_lanes():
++    """One active contract, never choose compatibility from supplied marker."""
++    lanes = {
++        "frameworks_base": ("frameworks/base", FRAMEWORK_PATCH_NAMES, "frameworks_revision"),
++        "launcher3": ("packages/apps/Launcher3", LAUNCHER_PATCH_NAMES, "launcher3_revision"),
++        "emulator_goldfish": ("device/generic/goldfish", EMULATOR_PATCH_NAMES, "emulator_goldfish_revision"),
++    }
++    if NATIVE_PATCH_NAMES:
++        lanes["frameworks_native"] = (NATIVE_PROJECT, NATIVE_PATCH_NAMES, "frameworks_native_revision")
++    return lanes
++
++
++def marker_fields():
++    return {"schema", "signer_sha256", "signer_certificate", "files", "patches", "platform_targets", "tools"} | {
++        field for path, names, field in platform_lanes().values()}
++
++
++def require_stage_schema(marker):
++    if (not isinstance(marker, dict) or type(marker.get("schema")) is not int or
++            marker["schema"] != stage_schema()):
++        raise ValueError("Owned stage schema differs from the currently registered native contract")
++    if NATIVE_PATCH_NAMES:
++        if (set(marker) != marker_fields() or
++                marker.get("frameworks_native_revision") != NATIVE_MANIFEST_REVISION):
++            raise ValueError("Native stage lacks the exact authenticated schema-5 fields/pin")
++    elif "frameworks_native_revision" in marker:
++        raise ValueError("Undeclared native stage pin under an empty native registry")
++
++
++def native_revision_from_payload(payload: bytes, lock) -> str:
++    """Derive from exact lock-authenticated bytes; a current native HEAD is not a pin."""
++    pin = lock["manifest"]
++    if (len(payload) != pin["default_xml_size"] or
++            hashlib.sha256(payload).hexdigest() != pin["default_xml_sha256"]):
++        raise ValueError("Native pin manifest bytes differ from the authenticated lock")
++    root = ET.fromstring(payload)
++    rows = [row for row in root.findall("project") if row.get("path") == NATIVE_PROJECT]
++    if (len(rows) != 1 or rows[0].get("name") != "platform_frameworks_native" or
++            rows[0].get("remote") != "grapheneos" or
++            rows[0].get("revision") != NATIVE_MANIFEST_REVISION):
++        raise ValueError("Native project is missing, ambiguous or outside the authenticated release")
++    return rows[0].get("revision")
++
++
++def native_revision_from_projects(projects) -> str:
++    rows = [row for row in projects if isinstance(row, dict) and row.get("path") == NATIVE_PROJECT]
++    if (len(rows) != 1 or rows[0].get("revision") != NATIVE_MANIFEST_REVISION or
++            rows[0].get("name") != "platform_frameworks_native" or rows[0].get("remote") != "grapheneos"):
++        raise ValueError("Native stage revision differs from the authenticated manifest project ledger")
++    return rows[0]["revision"]
++
++
++def authenticated_native_revision(source: Path, lock) -> str:
++    manifest = source / ".repo/manifests"
++    path = manifest / "default.xml"
++    if path.is_symlink() or not path.is_file():
++        raise ValueError("Native pin requires an ordinary checked-out default.xml")
++    pin = lock["manifest"]
++    def git(*args):
++        return subprocess.check_output(["git", "-C", str(manifest), *args], timeout=30)
++    if (git("rev-parse", "HEAD").decode().strip() != pin["commit"] or
++            git("rev-parse", "refs/tags/" + lock["release"]).decode().strip() != pin["tag_object"] or
++            git("rev-parse", "refs/tags/" + lock["release"] + "^{}").decode().strip() != pin["commit"]):
++        raise ValueError("Native pin manifest checkout/tag differs from the authenticated lock")
++    working = path.read_bytes()
++    committed = git("show", pin["commit"] + ":default.xml")
++    if working != committed:
++        raise ValueError("Native pin working manifest differs from its locked committed bytes")
++    return native_revision_from_payload(committed, lock)
++
++
++def marker_owned_targets(marker):
++    """Exact active patch-derived tracked/generated union for every consumer."""
++    require_stage_schema(marker)
++    lanes = platform_lanes()
++    if NATIVE_PATCH_NAMES:
++        expected_patches = {label: patch_ledger(names) for label, (path, names, field) in lanes.items()}
++        if marker.get("patches") != expected_patches or marker.get("tools") != tool_ledger():
++            raise ValueError("Native stage ordered patch/tool ledger differs from the active reviewed inputs")
++    targets = marker.get("platform_targets")
++    if not isinstance(targets, dict) or set(targets) != set(lanes):
++        raise ValueError("Incomplete active platform target lanes")
++    result = {}
++    for label, (project, names, field) in lanes.items():
++        rows = targets[label]
++        expected = patch_target_names(names)
++        if not isinstance(rows, dict) or set(rows) != expected or (names and not rows):
++            raise ValueError("Incomplete " + label + " patch-derived target inventory")
++        for name, digest in rows.items():
++            safe_relative(name)
++            if not isinstance(digest, str) or re.fullmatch("[0-9a-f]{64}", digest) is None:
++                raise ValueError("Invalid owned target digest: " + label + "/" + name)
++            result[project + "/" + name] = digest
++    return result
++
+ # Changing any tool which defines, stages, records, or verifies the release
+ # invalidates the owned stage and requires an explicit restage.
+ STAGE_TOOL_PATHS = (
+--- a/android/tools/x86_build_comparison.py
++++ b/android/tools/x86_build_comparison.py
+@@ -33,6 +33,7 @@
+ import phase1_provenance as provenance  # noqa: E402
+ import docker_locality_proof as locality  # noqa: E402
+ import x86_partition_capacity as partition_capacity  # noqa: E402
++import stage_contract  # noqa: E402
+ 
+ 
+ LOCK = ANDROID / "grapheneos.lock.json"
+@@ -383,24 +384,10 @@
+ 
+ 
+ def marker_owned_targets(marker):
+-    expected = {
+-        "frameworks_base": "frameworks/base",
+-        "launcher3": "packages/apps/Launcher3",
+-        "emulator_goldfish": "device/generic/goldfish",
+-    }
+-    targets = marker.get("platform_targets") if isinstance(marker, dict) else None
+-    require(isinstance(targets, dict) and set(targets) == set(expected),
+-            "Schema-4 stage has an incomplete platform target inventory")
+-    owned = {}
+-    for label, prefix in expected.items():
+-        rows = targets[label]
+-        require(isinstance(rows, dict) and rows, f"Missing {label} stage targets")
+-        for name, digest in rows.items():
+-            relative = safe_relative(name).as_posix()
+-            require(isinstance(digest, str) and SHA256.fullmatch(digest),
+-                    f"Invalid stage target digest: {label}/{name}")
+-            owned[f"{prefix}/{relative}"] = digest
+-    return owned
++    try:
++        return stage_contract.marker_owned_targets(marker)
++    except ValueError as error:
++        raise ComparisonError(str(error)) from error
+ 
+ 
+ def marker_external_inputs(marker):
+@@ -413,7 +400,7 @@
+ 
+ 
+ def validate_custom_stage_inventory(marker, changed, generated):
+-    """Validate the exact tracked/generated partition of one schema-4 stage."""
++    """Validate the exact tracked/generated partition of the active stage."""
+     require(isinstance(changed, dict) and isinstance(generated, dict),
+             "Custom source inventories must be objects")
+     owned = marker_owned_targets(marker)
+@@ -423,7 +410,7 @@
+             "Custom tracked inventory contains targets outside its marker")
+     expected_generated = marker_external_inputs(marker) | (owned_paths - tracked_paths)
+     require(set(generated) == expected_generated,
+-            "Custom generated inventory differs from its exact schema-4 partition")
++            "Custom generated inventory differs from its exact active-schema partition")
+     return owned
+ 
+ 
+@@ -512,8 +499,8 @@
+             marker = load_stage_module().verify_stage(source)
+             signer = provenance.public_certificate(certificate)
+         except (ValueError, provenance.ProvenanceError) as error:
+-            raise ComparisonError(f"Custom schema-4 stage verification failed: {error}") from error
+-        require(marker.get("schema") == 4 and
++            raise ComparisonError(f"Custom active-schema stage verification failed: {error}") from error
++        require(marker.get("schema") == stage_contract.stage_schema() and
+                 marker.get("signer_sha256") == signer.get("der_sha256"),
+                 "Custom stage signer differs from the selected emulator public certificate")
+         owned = marker_owned_targets(marker)
+@@ -564,7 +551,7 @@
+     else:
+         validate_custom_stage_inventory(marker, changed, generated)
+         stage = {
+-            "state": "schema-4-owned-stage",
++            "state": f"schema-{stage_contract.stage_schema()}-owned-stage",
+             "marker": marker,
+             "marker_sha256": ordinary_ref(marker_path)["sha256"],
+             "development_certificate": signer,
+@@ -1380,13 +1367,13 @@
+     else:
+         require(isinstance(stage, dict) and set(stage) == {
+             "state", "marker", "marker_sha256", "development_certificate", "qualification"
+-        } and stage["state"] == "schema-4-owned-stage" and
++        } and stage["state"] == f"schema-{stage_contract.stage_schema()}-owned-stage" and
+                 stage["qualification"] == "emulator-development-only" and
+                 SHA256.fullmatch(str(stage["marker_sha256"])),
+-                "Custom receipt lacks schema-4 development staging")
++                "Custom receipt lacks active-schema development staging")
+         marker = stage["marker"]
+         certificate = stage["development_certificate"]
+-        require(isinstance(marker, dict) and marker.get("schema") == 4 and
++        require(isinstance(marker, dict) and marker.get("schema") == stage_contract.stage_schema() and
+                 isinstance(certificate, dict) and set(certificate) == {
+                     "file", "der_sha256", "der_size", "subject"
+                 } and isinstance(certificate["file"], dict) and
+@@ -1400,6 +1387,9 @@
+                 "Custom stage/certificate binding is invalid")
+         validate_custom_stage_inventory(
+             marker, source["owned_tracked_changes"], source["generated_inputs"])
++        if stage_contract.NATIVE_PATCH_NAMES:
++            require(marker["frameworks_native_revision"] == stage_contract.native_revision_from_projects(pin["projects"]),
++                    "Native stage revision differs from authenticated source project ledger")
+     for ledger_name in ("owned_tracked_changes", "generated_inputs"):
+         ledger = source[ledger_name]
+         require(isinstance(ledger, dict), f"Invalid {ledger_name}")

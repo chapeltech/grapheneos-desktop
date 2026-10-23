@@ -1,0 +1,346 @@
+diff --git a/services/inputflinger/dispatcher/Entry.h b/services/inputflinger/dispatcher/Entry.h
+--- a/services/inputflinger/dispatcher/Entry.h
++++ b/services/inputflinger/dispatcher/Entry.h
+@@ -132,6 +132,10 @@
+         SKIP,
+         // The event should be sent to the application.
+         CONTINUE,
++        // The exact event was admitted as healthy claimed Wonad application
++        // input. InputDispatcher retains this marker through the app's
++        // handled/unhandled completion and never infers it from later focus.
++        CONTINUE_WONAD_CLAIMED,
+         // The event should eventually be sent to the application, after a delay.
+         TRY_AGAIN_LATER,
+         // The event should not be initially sent to the application, but instead go through
+@@ -140,6 +144,23 @@
+     };
+     // These are special fields that may need to be modified while the event is being dispatched.
+     mutable InterceptKeyResult interceptKeyResult; // set based on the interception result
++    // Admission is immutable once policy returns the private -3 result. The
++    // separate completion-owner state moves exactly once from the inbound
++    // KeyEntry to one successfully enqueued foreground DispatchEntry, then to
++    // either its handled/unhandled policy callback or its release cleanup.
++    enum class WonadCompletionOwner { NONE, PENDING, FOREGROUND, TAKEN };
++    mutable bool wonadClaimedAdmission = false;
++    // Fresh signed-63-bit process nonce allocated under InputDispatcher's
++    // lock before policy. Candidate persists across delay retries; token is
++    // published only after Java returns the private claimed result.
++    mutable int64_t wonadAdmissionCandidate = 0;
++    mutable int64_t wonadAdmissionToken = 0;
++    mutable ui::LogicalDisplayId wonadClaimedDisplayId =
++            ui::LogicalDisplayId::INVALID;
++    mutable WonadCompletionOwner wonadCompletionOwner = WonadCompletionOwner::NONE;
++    // True only on real inbound release, not a move back into mInboundQueue.
++    // Covers reset/filter/disable during the unlocked admission callback.
++    mutable bool wonadInboundReleased = false;
+     mutable nsecs_t interceptKeyWakeupTime;        // used with INTERCEPT_KEY_RESULT_TRY_AGAIN_LATER
+     mutable int32_t flags;
+     // TODO(b/328618922): Refactor key repeat generation to make repeatCount non-mutable.
+@@ -240,6 +261,10 @@
+     // is when dispatching an event to a global monitor.
+     std::optional<int32_t> windowId;
+ 
++    // True only for the single foreground DispatchEntry which atomically took
++    // a claimed KeyEntry's PENDING completion obligation at enqueue time.
++    bool wonadClaimedCompletionOwner = false;
++
+     DispatchEntry(std::shared_ptr<const EventEntry> eventEntry,
+                   ftl::Flags<InputTargetFlags> targetFlags, const ui::Transform& transform,
+                   const ui::Transform& rawTransform, float globalScaleFactor, gui::Uid targetUid,
+diff --git a/services/inputflinger/dispatcher/InputDispatcher.cpp b/services/inputflinger/dispatcher/InputDispatcher.cpp
+--- a/services/inputflinger/dispatcher/InputDispatcher.cpp
++++ b/services/inputflinger/dispatcher/InputDispatcher.cpp
+@@ -41,6 +41,7 @@
+ #include <utils/StrongPointer.h>
+ #include <utils/Trace.h>
+ 
++#include <atomic>
+ #include <cerrno>
+ #include <cinttypes>
+ #include <climits>
+@@ -83,6 +84,20 @@
+ namespace android::inputdispatcher {
+ 
+ namespace {
++
++// Process-wide private signed63 nonce. INT64_MAX is issued once; zero is
++// permanent exhaustion. No wrap and no dispatcher-recreation reuse.
++int64_t nextWonadAdmissionToken() {
++    static std::atomic<int64_t> next{1};
++    int64_t candidate = next.load(std::memory_order_relaxed);
++    while (candidate != 0) {
++        const int64_t successor = candidate == INT64_MAX ? 0 : candidate + 1;
++        if (next.compare_exchange_weak(candidate, successor, std::memory_order_relaxed)) {
++            return candidate;
++        }
++    }
++    return 0;
++}
+ 
+ template <class Entry>
+ void ensureEventTraced(const Entry& entry) {
+@@ -1704,6 +1719,23 @@
+ }
+ 
+ void InputDispatcher::releaseInboundEventLocked(std::shared_ptr<const EventEntry> entry) {
++    if (entry->type == EventEntry::Type::KEY) {
++        const KeyEntry& keyEntry = static_cast<const KeyEntry&>(*entry);
++        keyEntry.wonadInboundReleased = true;
++        if (keyEntry.wonadCompletionOwner ==
++                KeyEntry::WonadCompletionOwner::PENDING) {
++            KeyEvent event = createKeyEvent(keyEntry);
++            const int64_t admissionToken = keyEntry.wonadAdmissionToken;
++            const ui::LogicalDisplayId admittedDisplay = keyEntry.wonadClaimedDisplayId;
++            keyEntry.wonadCompletionOwner = KeyEntry::WonadCompletionOwner::TAKEN;
++            auto command = [this, event = std::move(event), admissionToken,
++                            admittedDisplay]() REQUIRES(mLock) {
++                scoped_unlock unlock(mLock);
++                mPolicy.notifyWonadKeyHandled(event, admissionToken, admittedDisplay, true);
++            };
++            postCommandLocked(std::move(command));
++        }
++    }
+     const std::shared_ptr<InjectionState>& injectionState = entry->injectionState;
+     if (injectionState && injectionState->injectionResult == InputEventInjectionResult::PENDING) {
+         LOG_IF(INFO, DEBUG_DISPATCH_CYCLE) << "Injected inbound event was dropped.";
+@@ -3733,6 +3765,16 @@
+ 
+     // Remember that we are waiting for this dispatch to complete.
+     if (dispatchEntry->hasForegroundTarget()) {
++        if (eventEntry->type == EventEntry::Type::KEY) {
++            const KeyEntry& keyEntry = static_cast<const KeyEntry&>(*eventEntry);
++            if (keyEntry.wonadClaimedAdmission &&
++                keyEntry.wonadCompletionOwner ==
++                        KeyEntry::WonadCompletionOwner::PENDING) {
++                keyEntry.wonadCompletionOwner =
++                        KeyEntry::WonadCompletionOwner::FOREGROUND;
++                dispatchEntry->wonadClaimedCompletionOwner = true;
++            }
++        }
+         incrementPendingForegroundDispatches(*eventEntry);
+     }
+ 
+@@ -4130,7 +4172,25 @@
+ 
+ void InputDispatcher::releaseDispatchEntry(std::unique_ptr<DispatchEntry> dispatchEntry) {
+     if (dispatchEntry->hasForegroundTarget()) {
+-        decrementPendingForegroundDispatches(*(dispatchEntry->eventEntry));
++        const std::shared_ptr<const EventEntry>& eventEntry = dispatchEntry->eventEntry;
++        if (eventEntry->type == EventEntry::Type::KEY) {
++            const KeyEntry& keyEntry = static_cast<const KeyEntry&>(*eventEntry);
++            if (dispatchEntry->wonadClaimedCompletionOwner &&
++                keyEntry.wonadCompletionOwner ==
++                        KeyEntry::WonadCompletionOwner::FOREGROUND) {
++                KeyEvent event = createKeyEvent(keyEntry);
++                const int64_t admissionToken = keyEntry.wonadAdmissionToken;
++                const ui::LogicalDisplayId admittedDisplay = keyEntry.wonadClaimedDisplayId;
++                keyEntry.wonadCompletionOwner = KeyEntry::WonadCompletionOwner::TAKEN;
++                auto command = [this, event = std::move(event), admissionToken,
++                                admittedDisplay]() REQUIRES(mLock) {
++                    scoped_unlock unlock(mLock);
++                    mPolicy.notifyWonadKeyHandled(event, admissionToken, admittedDisplay, true);
++                };
++                postCommandLocked(std::move(command));
++            }
++        }
++        decrementPendingForegroundDispatches(*eventEntry);
+     }
+ }
+ 
+@@ -6879,12 +6939,17 @@
+                                                              const KeyEntry& entry) {
+     KeyEvent event = createKeyEvent(entry);
+     event.setDisplayId(displayId);
++    if (entry.wonadAdmissionCandidate == 0 && !entry.wonadInboundReleased) {
++        entry.wonadAdmissionCandidate = nextWonadAdmissionToken();
++    }
++    const int64_t wonadAdmissionToken = entry.wonadAdmissionCandidate;
+     std::variant<nsecs_t, KeyEntry::InterceptKeyResult> interceptResult;
+     { // release lock
+         scoped_unlock unlock(mLock);
+         android::base::Timer t;
+         interceptResult =
+-                mPolicy.interceptKeyBeforeDispatching(focusedWindowToken, event, entry.policyFlags);
++                mPolicy.interceptKeyBeforeDispatching(
++                        focusedWindowToken, event, entry.policyFlags, wonadAdmissionToken);
+         if (t.duration() > SLOW_INTERCEPTION_THRESHOLD) {
+             ALOGW("Excessive delay in interceptKeyBeforeDispatching; took %s ms",
+                   std::to_string(t.duration().count()).c_str());
+@@ -6893,6 +6958,22 @@
+ 
+     if (std::holds_alternative<KeyEntry::InterceptKeyResult>(interceptResult)) {
+         entry.interceptKeyResult = std::get<KeyEntry::InterceptKeyResult>(interceptResult);
++        if (entry.interceptKeyResult ==
++                KeyEntry::InterceptKeyResult::CONTINUE_WONAD_CLAIMED) {
++            if (wonadAdmissionToken <= 0 || entry.wonadInboundReleased) {
++                entry.interceptKeyResult = KeyEntry::InterceptKeyResult::SKIP;
++                entry.wonadCompletionOwner = KeyEntry::WonadCompletionOwner::TAKEN;
++                // A real release during policy unlock cannot acquire a new
++                // pending obligation. Clean the exact orphan registration.
++                scoped_unlock unlock(mLock);
++                mPolicy.notifyWonadKeyHandled(event, wonadAdmissionToken, displayId, true);
++            } else {
++                entry.wonadClaimedAdmission = true;
++                entry.wonadAdmissionToken = wonadAdmissionToken;
++                entry.wonadClaimedDisplayId = displayId;
++                entry.wonadCompletionOwner = KeyEntry::WonadCompletionOwner::PENDING;
++            }
++        }
+         return;
+     }
+ 
+@@ -6977,6 +7058,24 @@
+     std::shared_ptr<const EventEntry> eventEntry = dispatchEntry->eventEntry;
+     const bool hasForegroundTarget = dispatchEntry->hasForegroundTarget();
+     const KeyEntry& keyEntry = static_cast<const KeyEntry&>(*(eventEntry));
++    const bool wonadClaimed = hasForegroundTarget &&
++            dispatchEntry->wonadClaimedCompletionOwner &&
++            keyEntry.wonadClaimedAdmission &&
++            keyEntry.wonadCompletionOwner == KeyEntry::WonadCompletionOwner::FOREGROUND;
++    // Transfer the sole cleanup obligation before any interruptible policy
++    // call. A concurrent queue drain now sees TAKEN and cannot post a second
++    // cleanup for this Java record.
++    if (wonadClaimed) {
++        keyEntry.wonadCompletionOwner = KeyEntry::WonadCompletionOwner::TAKEN;
++    }
++    auto finishWonadHandled = [&]() REQUIRES(mLock) {
++        if (!wonadClaimed) return;
++        KeyEvent event = createKeyEvent(keyEntry);
++        const int64_t admissionToken = keyEntry.wonadAdmissionToken;
++        const ui::LogicalDisplayId admittedDisplay = keyEntry.wonadClaimedDisplayId;
++        scoped_unlock unlock(mLock);
++        mPolicy.notifyWonadKeyHandled(event, admissionToken, admittedDisplay, false);
++    };
+     // To prevent misuse, ensure dispatchEntry is no longer valid.
+     dispatchEntry = nullptr;
+     if (keyEntry.flags & AKEY_EVENT_FLAG_FALLBACK) {
+@@ -6984,8 +7083,13 @@
+             // Report the key as unhandled, since the fallback was not handled.
+             mReporter->reportUnhandledKey(keyEntry.id);
+         }
++        if (wonadClaimed) finishWonadHandled();
+         return {};
+     }
++    // The immutable admission applies to every target of the KeyEntry. A
++    // monitor must not run stock after-app policy or consume the foreground
++    // target's exact Java completion authority.
++    if (keyEntry.wonadClaimedAdmission && !wonadClaimed) return {};
+ 
+     // Get the fallback key state.
+     // Clear it out after dispatching the UP.
+@@ -7013,7 +7117,9 @@
+ 
+             if (const auto unhandledKeyFallback =
+                         mPolicy.dispatchUnhandledKey(connection->getToken(), event,
+-                                                     keyEntry.policyFlags);
++                                                     keyEntry.policyFlags, wonadClaimed,
++                                                     keyEntry.wonadAdmissionToken,
++                                                     keyEntry.wonadClaimedDisplayId);
+                 unhandledKeyFallback) {
+                 event = *unhandledKeyFallback;
+             }
+@@ -7035,6 +7141,8 @@
+                 }
+             }
+             connection->inputState.removeFallbackKey(originalKeyCode);
++        } else if (wonadClaimed) {
++            finishWonadHandled();
+         }
+     } else {
+         // If the application did not handle a non-fallback key, first check
+@@ -7048,6 +7156,7 @@
+                     << originalKeyCode << ", action=" << keyEntry.action
+                     << ", repeatCount=" << keyEntry.repeatCount << ", policyFlags=0x" << std::hex
+                     << keyEntry.policyFlags;
++            if (wonadClaimed) finishWonadHandled();
+             return {};
+         }
+ 
+@@ -7064,7 +7173,9 @@
+ 
+         bool fallback = false;
+         if (auto fb = mPolicy.dispatchUnhandledKey(connection->getToken(), event,
+-                                                   keyEntry.policyFlags);
++                                                   keyEntry.policyFlags, wonadClaimed,
++                                                   keyEntry.wonadAdmissionToken,
++                                                   keyEntry.wonadClaimedDisplayId);
+             fb) {
+             fallback = true;
+             event = *fb;
+diff --git a/services/inputflinger/dispatcher/include/InputDispatcherPolicyInterface.h b/services/inputflinger/dispatcher/include/InputDispatcherPolicyInterface.h
+--- a/services/inputflinger/dispatcher/include/InputDispatcherPolicyInterface.h
++++ b/services/inputflinger/dispatcher/include/InputDispatcherPolicyInterface.h
+@@ -121,13 +121,23 @@
+     /* Allows the policy a chance to intercept a key before dispatching. */
+     virtual std::variant<nsecs_t, inputdispatcher::KeyEntry::InterceptKeyResult>
+     interceptKeyBeforeDispatching(const sp<IBinder>& token, const KeyEvent& keyEvent,
+-                                  uint32_t policyFlags) = 0;
++                                  uint32_t policyFlags,
++                                  int64_t wonadAdmissionToken) = 0;
+ 
+     /* Allows the policy a chance to perform default processing for an unhandled key.
+      * Returns an alternate key event to redispatch as a fallback, if needed. */
+     virtual std::optional<KeyEvent> dispatchUnhandledKey(const sp<IBinder>& token,
+                                                          const KeyEvent& keyEvent,
+-                                                         uint32_t policyFlags) = 0;
++                                                         uint32_t policyFlags,
++                                                         bool wonadClaimed,
++                                                         int64_t wonadAdmissionToken,
++                                                         ui::LogicalDisplayId wonadDisplayId) = 0;
++
++    /* Releases one exact handled or undispatched Wonad event authority. */
++    virtual void notifyWonadKeyHandled(const KeyEvent& keyEvent,
++                                       int64_t wonadAdmissionToken,
++                                       ui::LogicalDisplayId wonadDisplayId,
++                                       bool abandoned) = 0;
+ 
+     /* Notifies the policy about switch events.
+      */
+diff --git a/services/inputflinger/tests/FakeInputDispatcherPolicy.h b/services/inputflinger/tests/FakeInputDispatcherPolicy.h
+--- a/services/inputflinger/tests/FakeInputDispatcherPolicy.h
++++ b/services/inputflinger/tests/FakeInputDispatcherPolicy.h
+@@ -229,9 +229,12 @@
+     void interceptMotionBeforeQueueing(ui::LogicalDisplayId, uint32_t, int32_t, nsecs_t,
+                                        uint32_t&) override;
+     std::variant<nsecs_t, inputdispatcher::KeyEntry::InterceptKeyResult>
+-    interceptKeyBeforeDispatching(const sp<IBinder>&, const KeyEvent&, uint32_t) override;
++    interceptKeyBeforeDispatching(const sp<IBinder>&, const KeyEvent&, uint32_t,
++                                  int64_t) override;
+     std::optional<KeyEvent> dispatchUnhandledKey(const sp<IBinder>&, const KeyEvent& event,
+-                                                 uint32_t) override;
++                                                 uint32_t, bool, int64_t,
++                                                 ui::LogicalDisplayId) override;
++    void notifyWonadKeyHandled(const KeyEvent&, int64_t, ui::LogicalDisplayId, bool) override;
+     void notifySwitch(nsecs_t when, uint32_t switchValues, uint32_t switchMask,
+                       uint32_t policyFlags) override;
+     void pokeUserActivity(nsecs_t eventTime, int32_t eventType,
+diff --git a/services/inputflinger/tests/FakeInputDispatcherPolicy.cpp b/services/inputflinger/tests/FakeInputDispatcherPolicy.cpp
+--- a/services/inputflinger/tests/FakeInputDispatcherPolicy.cpp
++++ b/services/inputflinger/tests/FakeInputDispatcherPolicy.cpp
+@@ -516,7 +516,7 @@
+ 
+ std::variant<nsecs_t, inputdispatcher::KeyEntry::InterceptKeyResult>
+ FakeInputDispatcherPolicy::interceptKeyBeforeDispatching(const sp<IBinder>&, const KeyEvent& event,
+-                                                         uint32_t) {
++                                                         uint32_t, int64_t) {
+     if (inputdispatcher::KeyEntry::InterceptKeyResult* result =
+                 std::get_if<inputdispatcher::KeyEntry::InterceptKeyResult>(
+                         &mInterceptKeyBeforeDispatchingResult)) {
+@@ -549,12 +549,16 @@
+ 
+ std::optional<KeyEvent> FakeInputDispatcherPolicy::dispatchUnhandledKey(const sp<IBinder>&,
+                                                                         const KeyEvent& event,
+-                                                                        uint32_t) {
++                                                                        uint32_t, bool, int64_t,
++                                                                        ui::LogicalDisplayId) {
+     std::scoped_lock lock(mLock);
+     mReportedUnhandledKeycodes.emplace(event.getKeyCode());
+     mNotifyUnhandledKey.notify_all();
+     return mUnhandledKeyHandler != nullptr ? mUnhandledKeyHandler(event) : std::nullopt;
+ }
++
++void FakeInputDispatcherPolicy::notifyWonadKeyHandled(
++        const KeyEvent&, int64_t, ui::LogicalDisplayId, bool) {}
+ 
+ void FakeInputDispatcherPolicy::notifySwitch(nsecs_t when, uint32_t switchValues,
+                                              uint32_t switchMask, uint32_t policyFlags) {

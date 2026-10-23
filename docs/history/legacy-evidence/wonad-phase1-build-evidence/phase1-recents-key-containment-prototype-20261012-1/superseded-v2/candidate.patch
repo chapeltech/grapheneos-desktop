@@ -1,0 +1,173 @@
+--- a/frameworks/base/services/core/java/com/android/server/input/KeyGestureController.java
++++ b/frameworks/base/services/core/java/com/android/server/input/KeyGestureController.java
+@@ -207,6 +207,14 @@
+             }
+     );
+ 
++    /**
++     * Pair state for stock Recents keys that became fail-black while their key stream was in
++     * flight. This is deliberately separate from the Wonad shortcut alphabet: APP_SWITCH and
++     * RECENT_APPS remain stock keys whenever their exact display is not contained.
++     */
++    private final WonadRecentsKeyContainment mWonadRecentsKeyContainment =
++            new WonadRecentsKeyContainment();
++
+     private final Context mContext;
+     private InputManagerService.WindowManagerCallbacks mWindowManagerCallbacks;
+     private final Handler mHandler;
+@@ -635,6 +643,14 @@
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+ 
++        // Stock handles these two keys before the ordinary containment seam. Prevent a blocked
++        // claimed display from invoking global phone Recents, while retaining stock ordering for
++        // phone/unclaimed/healthy displays. If containment appears after APP_SWITCH DOWN has
++        // preloaded Recents, explicitly cancel that stock pair and drain its remaining events.
++        if (interceptWonadContainedRecentsKey(focus, event, policyFlags)) {
++            return KEY_INTERCEPT_RESULT_CONSUMED;
++        }
++
+         // TODO(b/358569822) Remove below once we have nicer API for listening to shortcuts
+         if ((event.isMetaPressed() || KeyEvent.isMetaKey(event.getKeyCode()))
+                 && shouldInterceptShortcuts(focus)
+@@ -685,6 +701,36 @@
+         return KEY_INTERCEPT_RESULT_NOT_CONSUMED;
+     }
+ 
++    private boolean interceptWonadContainedRecentsKey(@Nullable IBinder focusedToken,
++            @NonNull KeyEvent event, int policyFlags) {
++        final int keyCode = event.getKeyCode();
++        if (keyCode != KeyEvent.KEYCODE_APP_SWITCH
++                && keyCode != KeyEvent.KEYCODE_RECENT_APPS) {
++            return false;
++        }
++        final InterceptKeyStage stockStage =
++                mInterceptStages.get(INTERCEPT_STAGE_SHORTCUTS_BEFORE_KEY_CAPTURE);
++        final boolean blocked =
++                org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
++                        mContext, mWindowManagerInternal, event, policyFlags);
++        final int decision = mWonadRecentsKeyContainment.onKeyEvent(
++                event, blocked, stockStage.isKeyConsumed(event));
++        if (decision == WonadRecentsKeyContainment.PASS) {
++            return false;
++        }
++        if (decision == WonadRecentsKeyContainment.CANCEL_STOCK_APP_SWITCH) {
++            handleKeyGesture(event.getDeviceId(), new int[]{keyCode},
++                    /* modifierState = */ 0, KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
++                    KeyGestureEvent.ACTION_GESTURE_COMPLETE, event.getDisplayId(), focusedToken,
++                    KeyGestureEvent.FLAG_CANCELLED, /* appLaunchData = */ null);
++        }
++        if (decision == WonadRecentsKeyContainment.CANCEL_STOCK_APP_SWITCH
++                || decision == WonadRecentsKeyContainment.FORGET_STOCK_PAIR) {
++            stockStage.forgetConsumedKey(event);
++        }
++        return true;
++    }
++
+     private long interceptMultiKeyCombination(@NonNull KeyEvent event) {
+         if (mKeyCombinationManager.isKeyConsumed(event)) {
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+@@ -1986,6 +2032,59 @@
+         }
+     }
+ 
++    /**
++     * Tracks only fail-black Recents pairs. A blocked first DOWN never reaches stock. If stock
++     * already consumed a healthy APP_SWITCH DOWN, the first subsequently blocked event requests
++     * one cancelled COMPLETE so PhoneWindowManager can unwind its preload. The rest of either
++     * pair remains consumed even if the claim becomes healthy before UP.
++     */
++    private static final class WonadRecentsKeyContainment {
++        static final int PASS = 0;
++        static final int CONSUME = 1;
++        static final int CANCEL_STOCK_APP_SWITCH = 2;
++        static final int FORGET_STOCK_PAIR = 3;
++
++        private static final int PAIR_DRAINING = 1;
++        private final SparseArray<SparseIntArray> mPairsForDevice = new SparseArray<>();
++
++        int onKeyEvent(@NonNull KeyEvent event, boolean blocked, boolean stockConsumed) {
++            final int keyCode = event.getKeyCode();
++            if (keyCode != KeyEvent.KEYCODE_APP_SWITCH
++                    && keyCode != KeyEvent.KEYCODE_RECENT_APPS) {
++                return PASS;
++            }
++            final int deviceId = event.getDeviceId();
++            final boolean terminal = event.getAction() == KeyEvent.ACTION_UP
++                    || event.isCanceled();
++            final SparseIntArray pairs = mPairsForDevice.get(deviceId);
++            if (pairs != null && pairs.get(keyCode, 0) == PAIR_DRAINING) {
++                if (terminal) {
++                    pairs.delete(keyCode);
++                    if (pairs.size() == 0) {
++                        mPairsForDevice.remove(deviceId);
++                    }
++                }
++                return CONSUME;
++            }
++            if (!blocked) {
++                return PASS;
++            }
++            if (!terminal) {
++                SparseIntArray draining = pairs;
++                if (draining == null) {
++                    draining = new SparseIntArray();
++                    mPairsForDevice.put(deviceId, draining);
++                }
++                draining.put(keyCode, PAIR_DRAINING);
++            }
++            if (!stockConsumed) {
++                return CONSUME;
++            }
++            return keyCode == KeyEvent.KEYCODE_APP_SWITCH
++                    ? CANCEL_STOCK_APP_SWITCH : FORGET_STOCK_PAIR;
++        }
++    }
++
+     // TODO(b/416681006): Add more state and verification code common to all stages.
+     //  e.g. If previous stage consumes key down but doesn't consume key up, have policy to
+     //  determine whether to consume shortcuts or not.
+@@ -2019,6 +2118,23 @@
+             return needToConsumeKey;
+         }
+ 
++        private boolean isKeyConsumed(@NonNull KeyEvent event) {
++            final Set<Integer> consumedKeys = mConsumedKeysForDevice.get(event.getDeviceId());
++            return consumedKeys != null && consumedKeys.contains(event.getKeyCode());
++        }
++
++        private void forgetConsumedKey(@NonNull KeyEvent event) {
++            final int deviceId = event.getDeviceId();
++            final Set<Integer> consumedKeys = mConsumedKeysForDevice.get(deviceId);
++            if (consumedKeys == null) {
++                return;
++            }
++            consumedKeys.remove(event.getKeyCode());
++            if (consumedKeys.isEmpty()) {
++                mConsumedKeysForDevice.remove(deviceId);
++            }
++        }
++
+         protected abstract boolean onKeyEvent(@Nullable IBinder focusedToken,
+                 @NonNull KeyEvent event);
+     }
+--- a/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -3500,10 +3500,14 @@
+                 }
+                 break;
+             case KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH:
+-                if (!keyguardOn) {
+-                    if (start) {
++                if (start) {
++                    if (!keyguardOn) {
+                         preloadRecentApps();
+-                    } else if (complete) {
++                    }
++                } else if (event.getAction() == KeyGestureEvent.ACTION_GESTURE_COMPLETE) {
++                    if (event.isCancelled() || keyguardOn) {
++                        cancelPreloadRecentApps();
++                    } else {
+                         toggleRecentApps();
+                     }
+                 }

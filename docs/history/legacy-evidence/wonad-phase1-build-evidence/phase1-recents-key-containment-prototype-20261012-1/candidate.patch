@@ -1,0 +1,641 @@
+--- a/KeyGestureController.java
++++ b/KeyGestureController.java
+@@ -105,12 +105,12 @@
+ import java.lang.annotation.Retention;
+ import java.lang.annotation.RetentionPolicy;
+ import java.util.ArrayDeque;
++import java.util.ArrayList;
+ import java.util.Arrays;
+-import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+-import java.util.Set;
++import java.util.function.IntPredicate;
+ 
+ /**
+  * A thread-safe component of {@link InputManagerService} responsible for managing callbacks when a
+@@ -207,6 +207,14 @@
+             }
+     );
+ 
++    /**
++     * Pair state for stock Recents keys that became fail-black while their key stream was in
++     * flight. This is deliberately separate from the Wonad shortcut alphabet: APP_SWITCH and
++     * RECENT_APPS remain stock keys whenever their exact display is not contained.
++     */
++    private final WonadRecentsKeyContainment mWonadRecentsKeyContainment =
++            new WonadRecentsKeyContainment();
++
+     private final Context mContext;
+     private InputManagerService.WindowManagerCallbacks mWindowManagerCallbacks;
+     private final Handler mHandler;
+@@ -231,6 +239,8 @@
+     private boolean mPendingMetaAction;
+     private boolean mPendingCapsLockToggle;
+     private boolean mPendingHideRecentSwitcher;
++    private final SparseArray<PendingExitFocusedApp> mPendingExitFocusedApps =
++            new SparseArray<>();
+ 
+     // Platform behaviors
+     private boolean mHasFeatureWatch;
+@@ -626,8 +636,8 @@
+         }
+ 
+         // Give only the fixed Rust desktop alphabet priority over stock Meta gestures.
+-        // Actual capture still requires the exact live, trusted external lease. Other
+-        // system keys, multi-key safety gestures and SecurePaste keep their order.
++        // Actual capture still requires the exact live, trusted external lease. Multi-key
++        // safety gestures and SecurePaste keep their order.
+         final boolean wonadShortcut =
+                 org.wonad.server.input.WonadInputBridge.shortcutKey(keyCode);
+         if (wonadShortcut && org.wonad.server.input.WonadInputBridge.intercept(
+@@ -635,6 +645,14 @@
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+ 
++        // Fail-black claimed external input must not reach any stock system-key action or focused
++        // app. This seam deliberately follows the fixed Wonad alphabet and safety/SecurePaste
++        // policy above, but precedes every stock pre-capture shortcut. Stateful Recents and
++        // focused-capture Escape pairs are unwound with their exact original ownership.
++        if (interceptWonadContainedBeforeKeyCapture(focus, event, policyFlags)) {
++            return KEY_INTERCEPT_RESULT_CONSUMED;
++        }
++
+         // TODO(b/358569822) Remove below once we have nicer API for listening to shortcuts
+         if ((event.isMetaPressed() || KeyEvent.isMetaKey(event.getKeyCode()))
+                 && shouldInterceptShortcuts(focus)
+@@ -649,11 +667,6 @@
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+ 
+-        if (org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+-                mContext, mWindowManagerInternal, event, policyFlags)) {
+-            return KEY_INTERCEPT_RESULT_CONSUMED;
+-        }
+-
+         // Allow focused window to capture key events
+         if (!wonadShortcut && org.wonad.server.input.WonadInputBridge.intercept(
+                 mContext, mWindowManagerInternal, event, policyFlags)) {
+@@ -685,6 +698,102 @@
+         return KEY_INTERCEPT_RESULT_NOT_CONSUMED;
+     }
+ 
++    private boolean interceptWonadContainedBeforeKeyCapture(@Nullable IBinder focusedToken,
++            @NonNull KeyEvent event, int policyFlags) {
++        final int keyCode = event.getKeyCode();
++        final InterceptKeyStage stockStage =
++                mInterceptStages.get(INTERCEPT_STAGE_SHORTCUTS_BEFORE_KEY_CAPTURE);
++        final boolean blocked =
++                org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
++                        mContext, mWindowManagerInternal, event, policyFlags);
++        if (keyCode != KeyEvent.KEYCODE_APP_SWITCH
++                && keyCode != KeyEvent.KEYCODE_RECENT_APPS) {
++            if (!blocked) {
++                return false;
++            }
++            // A new physical pair supersedes any stock ledger entry left by a device which
++            // vanished without UP. A stale old UP must not clear a newer pair with a different
++            // downTime; the exact-pair branch handles that distinction.
++            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
++                stockStage.forgetConsumedKey(event.getDeviceId(), keyCode);
++            } else {
++                stockStage.forgetConsumedKey(event);
++            }
++            if (keyCode == KeyEvent.KEYCODE_ESCAPE) {
++                cancelPendingExitFocusedApp(event, /* replacement = */
++                        event.getAction() == KeyEvent.ACTION_DOWN
++                                && event.getRepeatCount() == 0);
++            }
++            return true;
++        }
++        for (WonadRecentsKeyContainment.RetiredPair retired :
++                mWonadRecentsKeyContainment.retireMissingDevices(
++                        deviceId -> deviceId < 0 || getInputDevice(deviceId) != null)) {
++            stockStage.forgetConsumedKey(retired.deviceId, retired.keyCode);
++            if (retired.cancelStockAppSwitch) {
++                handleKeyGesture(retired.deviceId, new int[]{retired.keyCode},
++                        /* modifierState = */ 0,
++                        KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
++                        KeyGestureEvent.ACTION_GESTURE_COMPLETE, retired.displayId,
++                        /* focusedToken = */ null, KeyGestureEvent.FLAG_CANCELLED,
++                        /* appLaunchData = */ null);
++            }
++        }
++        final boolean stockWillConsumeFirstDown = event.getAction() == KeyEvent.ACTION_DOWN
++                && event.getRepeatCount() == 0
++                && (event.getMetaState() & SHORTCUT_META_MASK) == 0;
++        final WonadRecentsKeyContainment.Decision decision =
++                mWonadRecentsKeyContainment.onKeyEvent(event, blocked,
++                        stockStage.isKeyConsumed(event), stockWillConsumeFirstDown);
++        if (decision.cancelStockAppSwitch) {
++            handleKeyGesture(event.getDeviceId(), new int[]{keyCode},
++                    /* modifierState = */ 0, KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
++                    KeyGestureEvent.ACTION_GESTURE_COMPLETE, decision.cancelDisplayId,
++                    focusedToken, KeyGestureEvent.FLAG_CANCELLED,
++                    /* appLaunchData = */ null);
++        }
++        if (decision.forgetStockPair) {
++            stockStage.forgetConsumedKey(event.getDeviceId(), keyCode);
++        }
++        return decision.consume;
++    }
++
++    /** Cancel only the delayed Escape action owned by this physical pair. */
++    private boolean cancelPendingExitFocusedApp(@NonNull KeyEvent event, boolean replacement) {
++        final PendingExitFocusedApp pending;
++        synchronized (mPendingExitFocusedApps) {
++            pending = mPendingExitFocusedApps.get(event.getDeviceId());
++            if (pending == null || (pending.downTime != event.getDownTime() && !replacement)) {
++                return false;
++            }
++            mPendingExitFocusedApps.remove(event.getDeviceId());
++        }
++        mHandler.removeMessages(MSG_EXIT_FOCUSED_APP, pending.completion);
++        handleKeyGesture(event.getDeviceId(), new int[]{KeyEvent.KEYCODE_ESCAPE},
++                pending.metaState, KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
++                KeyGestureEvent.ACTION_GESTURE_COMPLETE, pending.displayId,
++                pending.focusedToken, KeyGestureEvent.FLAG_CANCELLED,
++                /* appLaunchData = */ null);
++        return true;
++    }
++
++    /** Complete a delayed Escape only while its exact record still owns the device slot. */
++    private void completePendingExitFocusedApp(@NonNull AidlKeyGestureEvent completion) {
++        boolean owned = false;
++        synchronized (mPendingExitFocusedApps) {
++            for (int index = 0; index < mPendingExitFocusedApps.size(); index++) {
++                if (mPendingExitFocusedApps.valueAt(index).completion == completion) {
++                    mPendingExitFocusedApps.removeAt(index);
++                    owned = true;
++                    break;
++                }
++            }
++        }
++        if (owned) {
++            handleKeyGesture(completion, /* focusedToken = */ null);
++        }
++    }
++
+     private long interceptMultiKeyCombination(@NonNull KeyEvent event) {
+         if (mKeyCombinationManager.isKeyConsumed(event)) {
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+@@ -872,6 +981,9 @@
+                 //  logic doesn't have access to focused token. Refactor this so that we don't
+                 //  have this custom logic to detect long press.
+                 if (firstDown && canFocusedWindowCaptureKeys(focusedToken)) {
++                    // A new physical DOWN retires only an older Escape pair from this device.
++                    // It cannot remove another keyboard's delayed exit or a replacement pair.
++                    cancelPendingExitFocusedApp(event, /* replacement = */ true);
+                     // Toast to quit application is shown on key down for ESCAPE key, when the
+                     // focused window is capturing keys.
+                     Toast.makeText(mContext, UiThread.get().getLooper(),
+@@ -887,15 +999,14 @@
+                             KeyGestureEvent.ACTION_GESTURE_COMPLETE,
+                             displayId, /* flags= */0, /* appLaunchData= */ null);
+                     Message msg = Message.obtain(mHandler, MSG_EXIT_FOCUSED_APP, eventToSend);
++                    synchronized (mPendingExitFocusedApps) {
++                        mPendingExitFocusedApps.put(event.getDeviceId(),
++                                new PendingExitFocusedApp(event.getDownTime(), displayId,
++                                        metaState, focusedToken, eventToSend));
++                    }
+                     mHandler.sendMessageDelayed(msg, LONG_PRESS_DURATION_FOR_EXIT_APP_MS);
+                 } else if (!down) {
+-                    if (mHandler.hasMessages(MSG_EXIT_FOCUSED_APP)) {
+-                        mHandler.removeMessages(MSG_EXIT_FOCUSED_APP);
+-                        handleKeyGesture(event.getDeviceId(), new int[]{KeyEvent.KEYCODE_ESCAPE},
+-                                metaState, KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
+-                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId, focusedToken,
+-                                KeyGestureEvent.FLAG_CANCELLED, /* appLaunchData= */ null);
+-                    }
++                    cancelPendingExitFocusedApp(event, /* replacement = */ false);
+                 }
+                 break;
+             case KeyEvent.KEYCODE_ASSIST:
+@@ -1465,7 +1576,7 @@
+                 takeScreenshot(msg.arg1, msg.arg2);
+                 break;
+             case MSG_EXIT_FOCUSED_APP:
+-                handleKeyGesture((AidlKeyGestureEvent) msg.obj, /* focusedToken= */null);
++                completePendingExitFocusedApp((AidlKeyGestureEvent) msg.obj);
+                 break;
+         }
+         return true;
+@@ -1986,37 +2097,285 @@
+         }
+     }
+ 
++    private static final class PendingExitFocusedApp {
++        final long downTime;
++        final int displayId;
++        final int metaState;
++        final IBinder focusedToken;
++        final AidlKeyGestureEvent completion;
++
++        PendingExitFocusedApp(long downTime, int displayId, int metaState,
++                @Nullable IBinder focusedToken, @NonNull AidlKeyGestureEvent completion) {
++            this.downTime = downTime;
++            this.displayId = displayId;
++            this.metaState = metaState;
++            this.focusedToken = focusedToken;
++            this.completion = completion;
++        }
++    }
++
++    /**
++     * Tracks only fail-black Recents pairs. A blocked first DOWN never reaches stock. If stock
++     * already consumed a healthy APP_SWITCH DOWN, the first subsequently blocked event requests
++     * one cancelled COMPLETE so PhoneWindowManager can unwind its preload. The rest of either
++     * pair remains consumed even if the claim becomes healthy before UP.
++     */
++    private static final class WonadRecentsKeyContainment {
++        private static final int PAIR_DRAINING = 1;
++        private static final int PAIR_STOCK = 2;
++
++        static final class Decision {
++            final boolean consume;
++            final boolean forgetStockPair;
++            final boolean cancelStockAppSwitch;
++            final int cancelDisplayId;
++
++            Decision(boolean consume, boolean forgetStockPair,
++                    boolean cancelStockAppSwitch, int cancelDisplayId) {
++                this.consume = consume;
++                this.forgetStockPair = forgetStockPair;
++                this.cancelStockAppSwitch = cancelStockAppSwitch;
++                this.cancelDisplayId = cancelDisplayId;
++            }
++        }
++
++        static final class RetiredPair {
++            final int deviceId;
++            final int keyCode;
++            final int displayId;
++            final boolean cancelStockAppSwitch;
++
++            RetiredPair(int deviceId, int keyCode, int displayId,
++                    boolean cancelStockAppSwitch) {
++                this.deviceId = deviceId;
++                this.keyCode = keyCode;
++                this.displayId = displayId;
++                this.cancelStockAppSwitch = cancelStockAppSwitch;
++            }
++        }
++
++        private static final class Pair {
++            final long downTime;
++            final int displayId;
++            int state;
++
++            Pair(long downTime, int displayId, int state) {
++                this.downTime = downTime;
++                this.displayId = displayId;
++                this.state = state;
++            }
++        }
++
++        private final SparseArray<SparseArray<Pair>> mPairsForDevice = new SparseArray<>();
++
++        List<RetiredPair> retireMissingDevices(@NonNull IntPredicate present) {
++            final ArrayList<RetiredPair> retired = new ArrayList<>();
++            for (int deviceIndex = mPairsForDevice.size() - 1; deviceIndex >= 0; deviceIndex--) {
++                final int deviceId = mPairsForDevice.keyAt(deviceIndex);
++                if (present.test(deviceId)) {
++                    continue;
++                }
++                final SparseArray<Pair> pairs = mPairsForDevice.valueAt(deviceIndex);
++                for (int pairIndex = 0; pairIndex < pairs.size(); pairIndex++) {
++                    final int keyCode = pairs.keyAt(pairIndex);
++                    final Pair pair = pairs.valueAt(pairIndex);
++                    retired.add(new RetiredPair(deviceId, keyCode, pair.displayId,
++                            pair.state == PAIR_STOCK
++                                    && keyCode == KeyEvent.KEYCODE_APP_SWITCH));
++                }
++                mPairsForDevice.removeAt(deviceIndex);
++            }
++            return retired;
++        }
++
++        Decision onKeyEvent(@NonNull KeyEvent event, boolean blocked, boolean stockConsumed,
++                boolean stockWillConsumeFirstDown) {
++            final int keyCode = event.getKeyCode();
++            if (keyCode != KeyEvent.KEYCODE_APP_SWITCH
++                    && keyCode != KeyEvent.KEYCODE_RECENT_APPS) {
++                return decision(false, false, false, event.getDisplayId());
++            }
++            final int deviceId = event.getDeviceId();
++            final long downTime = event.getDownTime();
++            final boolean firstDown = event.getAction() == KeyEvent.ACTION_DOWN
++                    && event.getRepeatCount() == 0;
++            final boolean terminal = event.getAction() == KeyEvent.ACTION_UP
++                    || event.isCanceled();
++            final SparseArray<Pair> pairs = mPairsForDevice.get(deviceId);
++            Pair current = pairs == null ? null : pairs.get(keyCode);
++
++            // A repeatCount=0 DOWN with a new downTime is a new physical pair, even if an old
++            // keyboard vanished without UP and its numeric device ID was later reused. Retire the
++            // old pair before stock sees the new event. A best-effort cancelled COMPLETE is safe:
++            // PhoneWindowManager accepts it only if the old device/display still owns preload.
++            if (firstDown && (current == null || current.downTime != downTime)) {
++                final boolean oldStockPair = current != null && current.state == PAIR_STOCK;
++                final boolean forgetOld = oldStockPair || stockConsumed;
++                final boolean cancelOld = forgetOld
++                        && keyCode == KeyEvent.KEYCODE_APP_SWITCH;
++                final int cancelDisplay = current == null
++                        ? event.getDisplayId() : current.displayId;
++                if (current != null) {
++                    removePair(deviceId, keyCode, pairs);
++                }
++                if (blocked) {
++                    putPair(deviceId, keyCode,
++                            new Pair(downTime, event.getDisplayId(), PAIR_DRAINING));
++                    return decision(true, forgetOld, cancelOld, cancelDisplay);
++                }
++                if (stockWillConsumeFirstDown) {
++                    putPair(deviceId, keyCode,
++                            new Pair(downTime, event.getDisplayId(), PAIR_STOCK));
++                }
++                return decision(false, forgetOld, cancelOld, cancelDisplay);
++            }
++
++            // Never let a late event from a retired pair mutate the replacement pair's stock
++            // ledger. In particular, an old external UP cannot complete a fresh phone DOWN.
++            if (current != null && current.downTime != downTime) {
++                return decision(true, false, false, current.displayId);
++            }
++
++            if (current != null && current.state == PAIR_DRAINING) {
++                if (terminal) {
++                    removePair(deviceId, keyCode, pairs);
++                }
++                return decision(true, false, false, current.displayId);
++            }
++
++            if (current != null) {
++                if (blocked) {
++                    if (terminal) {
++                        removePair(deviceId, keyCode, pairs);
++                    } else {
++                        current.state = PAIR_DRAINING;
++                    }
++                    return decision(true, true,
++                            keyCode == KeyEvent.KEYCODE_APP_SWITCH, current.displayId);
++                }
++                if (terminal) {
++                    removePair(deviceId, keyCode, pairs);
++                }
++                return decision(false, false, false, current.displayId);
++            }
++
++            if (blocked || stockConsumed) {
++                if (!terminal) {
++                    putPair(deviceId, keyCode,
++                            new Pair(downTime, event.getDisplayId(), PAIR_DRAINING));
++                }
++                return decision(true, stockConsumed,
++                        stockConsumed && keyCode == KeyEvent.KEYCODE_APP_SWITCH,
++                        event.getDisplayId());
++            }
++
++            // Stock APP_SWITCH emits COMPLETE from any unmodified UP, even if it never observed
++            // the matching DOWN. Consume such an unowned terminal event rather than toggling
++            // global phone Recents. Normal phone/external pairs were recorded at first DOWN.
++            if (keyCode == KeyEvent.KEYCODE_APP_SWITCH && terminal) {
++                return decision(true, false, false, event.getDisplayId());
++            }
++            return decision(false, false, false, event.getDisplayId());
++        }
++
++        private static Decision decision(boolean consume, boolean forgetStockPair,
++                boolean cancelStockAppSwitch, int cancelDisplayId) {
++            return new Decision(consume, forgetStockPair,
++                    cancelStockAppSwitch, cancelDisplayId);
++        }
++
++        private void putPair(int deviceId, int keyCode, Pair pair) {
++            SparseArray<Pair> pairs = mPairsForDevice.get(deviceId);
++            if (pairs == null) {
++                pairs = new SparseArray<>();
++                mPairsForDevice.put(deviceId, pairs);
++            }
++            pairs.put(keyCode, pair);
++        }
++
++        private void removePair(int deviceId, int keyCode, @NonNull SparseArray<Pair> pairs) {
++            pairs.remove(keyCode);
++            if (pairs.size() == 0) {
++                mPairsForDevice.remove(deviceId);
++            }
++        }
++    }
++
+     // TODO(b/416681006): Add more state and verification code common to all stages.
+     //  e.g. If previous stage consumes key down but doesn't consume key up, have policy to
+     //  determine whether to consume shortcuts or not.
+     private abstract static class InterceptKeyStage {
+ 
+-        /** Currently fully consumed key codes per device */
+-        private final SparseArray<Set<Integer>> mConsumedKeysForDevice = new SparseArray<>();
++        /** Exact downTime of each currently consumed physical key pair, grouped by device. */
++        private final SparseArray<SparseArray<Long>> mConsumedKeysForDevice =
++                new SparseArray<>();
+ 
+         private boolean interceptKey(@Nullable IBinder focusedToken, @NonNull KeyEvent event) {
+             final int deviceId = event.getDeviceId();
+             final int keyCode = event.getKeyCode();
+-            Set<Integer> consumedKeys = mConsumedKeysForDevice.get(deviceId);
+-            if (consumedKeys == null) {
+-                consumedKeys = new HashSet<>();
+-                mConsumedKeysForDevice.put(deviceId, consumedKeys);
+-            }
++            SparseArray<Long> consumedKeys = mConsumedKeysForDevice.get(deviceId);
+ 
+             if (onKeyEvent(focusedToken, event) && event.getAction() == KeyEvent.ACTION_DOWN
+                     && event.getRepeatCount() == 0) {
+-                consumedKeys.add(keyCode);
++                if (consumedKeys == null) {
++                    consumedKeys = new SparseArray<>();
++                    mConsumedKeysForDevice.put(deviceId, consumedKeys);
++                }
++                consumedKeys.put(keyCode, event.getDownTime());
+                 return true;
+             }
+ 
+-            boolean needToConsumeKey = consumedKeys.contains(keyCode);
+-            if (event.getAction() == KeyEvent.ACTION_UP || event.isCanceled()) {
++            final Long consumedDownTime = consumedKeys == null
++                    ? null : consumedKeys.get(keyCode);
++            final boolean exactPair = consumedDownTime != null
++                    && consumedDownTime == event.getDownTime();
++            final boolean firstDown = event.getAction() == KeyEvent.ACTION_DOWN
++                    && event.getRepeatCount() == 0;
++            // A new physical pair supersedes stale bookkeeping from a missing UP. Never consume
++            // a fresh phone DOWN merely because a former external keyboard reused the ID/key.
++            if (firstDown && consumedDownTime != null && !exactPair) {
+                 consumedKeys.remove(keyCode);
+-                if (consumedKeys.isEmpty()) {
++                if (consumedKeys.size() == 0) {
+                     mConsumedKeysForDevice.remove(deviceId);
+                 }
++                return false;
++            }
++            if (exactPair && (event.getAction() == KeyEvent.ACTION_UP || event.isCanceled())) {
++                consumedKeys.remove(keyCode);
++                if (consumedKeys.size() == 0) {
++                    mConsumedKeysForDevice.remove(deviceId);
++                }
++            }
++            return exactPair;
++        }
++
++        private boolean isKeyConsumed(@NonNull KeyEvent event) {
++            final SparseArray<Long> consumedKeys =
++                    mConsumedKeysForDevice.get(event.getDeviceId());
++            final Long downTime = consumedKeys == null
++                    ? null : consumedKeys.get(event.getKeyCode());
++            return downTime != null && downTime == event.getDownTime();
++        }
++
++        private void forgetConsumedKey(@NonNull KeyEvent event) {
++            final SparseArray<Long> consumedKeys =
++                    mConsumedKeysForDevice.get(event.getDeviceId());
++            final Long downTime = consumedKeys == null
++                    ? null : consumedKeys.get(event.getKeyCode());
++            if (downTime != null && downTime == event.getDownTime()) {
++                forgetConsumedKey(event.getDeviceId(), event.getKeyCode());
++            }
++        }
++
++        private void forgetConsumedKey(int deviceId, int keyCode) {
++            final SparseArray<Long> consumedKeys = mConsumedKeysForDevice.get(deviceId);
++            if (consumedKeys == null) {
++                return;
++            }
++            consumedKeys.remove(keyCode);
++            if (consumedKeys.size() == 0) {
++                mConsumedKeysForDevice.remove(deviceId);
+             }
+-            return needToConsumeKey;
+         }
+ 
+         protected abstract boolean onKeyEvent(@Nullable IBinder focusedToken,
+--- a/PhoneWindowManager.java
++++ b/PhoneWindowManager.java
+@@ -468,6 +468,9 @@
+     private WallpaperManagerInternal mWallpaperManagerInternal;
+ 
+     boolean mPreloadedRecentApps;
++    private static final int RECENTS_PRELOAD_NO_DEVICE = Integer.MIN_VALUE;
++    private int mPreloadedRecentAppsDeviceId = RECENTS_PRELOAD_NO_DEVICE;
++    private int mPreloadedRecentAppsDisplayId = INVALID_DISPLAY;
+     final Object mServiceAcquireLock = new Object();
+     Vibrator mVibrator; // Vibrator for giving feedback of orientation changes
+     AccessibilityManager mAccessibilityManager;
+@@ -3500,11 +3503,15 @@
+                 }
+                 break;
+             case KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH:
+-                if (!keyguardOn) {
+-                    if (start) {
+-                        preloadRecentApps();
+-                    } else if (complete) {
+-                        toggleRecentApps();
++                if (start) {
++                    if (!keyguardOn) {
++                        preloadRecentApps(deviceId, displayId);
++                    }
++                } else if (event.getAction() == KeyGestureEvent.ACTION_GESTURE_COMPLETE) {
++                    if (event.isCancelled() || keyguardOn) {
++                        cancelPreloadRecentApps(deviceId, displayId);
++                    } else {
++                        toggleRecentApps(deviceId, displayId);
+                     }
+                 }
+                 break;
+@@ -4132,7 +4139,13 @@
+     }
+ 
+     private void preloadRecentApps() {
++        preloadRecentApps(RECENTS_PRELOAD_NO_DEVICE, INVALID_DISPLAY);
++    }
++
++    private void preloadRecentApps(int deviceId, int displayId) {
+         mPreloadedRecentApps = true;
++        mPreloadedRecentAppsDeviceId = deviceId;
++        mPreloadedRecentAppsDisplayId = displayId;
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+             statusbar.preloadRecentApps();
+@@ -4141,7 +4154,7 @@
+ 
+     private void cancelPreloadRecentApps() {
+         if (mPreloadedRecentApps) {
+-            mPreloadedRecentApps = false;
++            clearRecentAppsPreloadOwner();
+             StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+             if (statusbar != null) {
+                 statusbar.cancelPreloadRecentApps();
+@@ -4149,6 +4162,24 @@
+         }
+     }
+ 
++    private void cancelPreloadRecentApps(int deviceId, int displayId) {
++        if (ownsRecentAppsPreload(deviceId, displayId)) {
++            cancelPreloadRecentApps();
++        }
++    }
++
++    private boolean ownsRecentAppsPreload(int deviceId, int displayId) {
++        return mPreloadedRecentApps
++                && mPreloadedRecentAppsDeviceId == deviceId
++                && mPreloadedRecentAppsDisplayId == displayId;
++    }
++
++    private void clearRecentAppsPreloadOwner() {
++        mPreloadedRecentApps = false;
++        mPreloadedRecentAppsDeviceId = RECENTS_PRELOAD_NO_DEVICE;
++        mPreloadedRecentAppsDisplayId = INVALID_DISPLAY;
++    }
++
+     private void toggleTaskbar() {
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+@@ -4157,13 +4188,19 @@
+     }
+ 
+     private void toggleRecentApps() {
+-        mPreloadedRecentApps = false; // preloading no longer needs to be canceled
++        clearRecentAppsPreloadOwner(); // preloading no longer needs to be canceled
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+             statusbar.toggleRecentApps();
+         }
+     }
+ 
++    private void toggleRecentApps(int deviceId, int displayId) {
++        if (ownsRecentAppsPreload(deviceId, displayId)) {
++            toggleRecentApps();
++        }
++    }
++
+     @Override
+     public void showRecentApps() {
+         mHandler.removeMessages(MSG_DISPATCH_SHOW_RECENTS);
+@@ -4171,7 +4208,7 @@
+     }
+ 
+     private void showRecentApps(boolean triggeredFromAltTab) {
+-        mPreloadedRecentApps = false; // preloading no longer needs to be canceled
++        clearRecentAppsPreloadOwner(); // preloading no longer needs to be canceled
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+             statusbar.showRecentApps(triggeredFromAltTab);
+@@ -4194,7 +4231,7 @@
+     }
+ 
+     private void hideRecentApps(boolean triggeredFromAltTab, boolean triggeredFromHome) {
+-        mPreloadedRecentApps = false; // preloading no longer needs to be canceled
++        clearRecentAppsPreloadOwner(); // preloading no longer needs to be canceled
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+             statusbar.hideRecentApps(triggeredFromAltTab, triggeredFromHome);

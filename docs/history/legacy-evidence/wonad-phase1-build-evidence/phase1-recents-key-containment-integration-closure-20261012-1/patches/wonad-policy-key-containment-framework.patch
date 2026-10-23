@@ -1,0 +1,993 @@
+--- a/services/core/java/com/android/server/input/InputManagerService.java
++++ b/services/core/java/com/android/server/input/InputManagerService.java
+@@ -581,7 +581,7 @@
+         mStickyModifierStateController = new StickyModifierStateController();
+         mInputDataStore = new InputDataStore();
+         mKeyGestureController = new KeyGestureController(mContext, injector.getLooper(),
+-                injector.getIoLooper(), mInputDataStore);
++                injector.getIoLooper(), mInputDataStore, mNative);
+         mKeyboardLedController = new KeyboardLedController(mContext, injector.getLooper(),
+                 mNative);
+         mVirtualInputDeviceController = new VirtualInputDeviceController(
+--- a/services/core/java/com/android/server/input/KeyGestureController.java
++++ b/services/core/java/com/android/server/input/KeyGestureController.java
+@@ -106,9 +106,10 @@
+ import java.lang.annotation.RetentionPolicy;
+ import java.util.ArrayDeque;
+ import java.util.Arrays;
+-import java.util.HashSet;
++import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.concurrent.atomic.AtomicReference;
+ import java.util.Objects;
+ import java.util.Set;
+ 
+@@ -189,20 +190,23 @@
+     private final Map<Integer, InterceptKeyStage> mInterceptStages = Map.of(
+             INTERCEPT_STAGE_SHORTCUTS_BEFORE_KEY_CAPTURE, new InterceptKeyStage() {
+                 @Override
+-                protected boolean onKeyEvent(@Nullable IBinder focus, @NonNull KeyEvent event) {
+-                    return interceptShortcutsBeforeKeyCapture(focus, event);
++                protected boolean onKeyEvent(@Nullable IBinder focus, @NonNull KeyEvent event,
++                        @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision) {
++                    return interceptShortcutsBeforeKeyCapture(focus, event, decision);
+                 }
+             },
+             INTERCEPT_STAGE_SHORTCUTS_AFTER_KEY_CAPTURE, new InterceptKeyStage() {
+                 @Override
+-                protected boolean onKeyEvent(@Nullable IBinder focus, @NonNull KeyEvent event) {
+-                    return interceptShortcutsAfterKeyCapture(focus, event);
++                protected boolean onKeyEvent(@Nullable IBinder focus, @NonNull KeyEvent event,
++                        @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision) {
++                    return interceptShortcutsAfterKeyCapture(focus, event, decision);
+                 }
+             },
+             INTERCEPT_STAGE_UNHANDLED_SHORTCUTS, new InterceptKeyStage() {
+                 @Override
+-                protected boolean onKeyEvent(@Nullable IBinder focus, @NonNull KeyEvent event) {
+-                    return interceptUnhandledShortcuts(focus, event);
++                protected boolean onKeyEvent(@Nullable IBinder focus, @NonNull KeyEvent event,
++                        @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision) {
++                    return interceptUnhandledShortcuts(focus, event, decision);
+                 }
+             }
+     );
+@@ -231,6 +235,36 @@
+     private boolean mPendingMetaAction;
+     private boolean mPendingCapsLockToggle;
+     private boolean mPendingHideRecentSwitcher;
++    // Java booleans mirror the exact Kotlin owner through atomic identity.
++    // Delayed cleanup for a retired claim can never clear a replacement.
++    private final AtomicReference<Object> mWonadPendingMetaOwner =
++            new AtomicReference<>();
++    private final AtomicReference<Object> mWonadPendingCapsOwner =
++            new AtomicReference<>();
++    private final AtomicReference<Object> mWonadPendingAltTabOwner =
++            new AtomicReference<>();
++
++    // The native reader is used only for exceptional saturation recovery: a
++    // complete all-device/all-keycode UP census.  Tests without it fail closed.
++    @Nullable private final NativeInputManagerService mWonadNativeInput;
++    @Nullable private InputManager mWonadInputManager;
++
++    // Device retirement discards that device's missing-UP pair state, then a
++    // full physical census may release exceptional global saturation.
++    private final InputManager.InputDeviceListener mWonadInputDeviceListener =
++            new InputManager.InputDeviceListener() {
++                @Override public void onInputDeviceAdded(int deviceId) {}
++                @Override public void onInputDeviceChanged(int deviceId) {}
++                @Override public void onInputDeviceRemoved(int deviceId) {
++                    final org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision =
++                            org.wonad.server.input.WonadPolicyKeyAdapter.removeDevice(deviceId);
++                    applyWonadPolicyCleanup(decision);
++                    for (InterceptKeyStage stage : mInterceptStages.values()) {
++                        stage.removeDevice(deviceId);
++                    }
++                    if (decision.saturated) reconcileWonadPolicyDevices();
++                }
++            };
+ 
+     // Platform behaviors
+     private boolean mHasFeatureWatch;
+@@ -268,12 +302,24 @@
+ 
+     public KeyGestureController(Context context, Looper looper, Looper ioLooper,
+             InputDataStore inputDataStore) {
+-        this(context, looper, ioLooper, inputDataStore, new Injector());
++        this(context, looper, ioLooper, inputDataStore, new Injector(), null);
++    }
++
++    KeyGestureController(Context context, Looper looper, Looper ioLooper,
++            InputDataStore inputDataStore, NativeInputManagerService nativeInput) {
++        this(context, looper, ioLooper, inputDataStore, new Injector(), nativeInput);
+     }
+ 
+     @VisibleForTesting
+     KeyGestureController(Context context, Looper looper, Looper ioLooper,
+             InputDataStore inputDataStore, Injector injector) {
++        this(context, looper, ioLooper, inputDataStore, injector, null);
++    }
++
++    private KeyGestureController(Context context, Looper looper, Looper ioLooper,
++            InputDataStore inputDataStore, Injector injector,
++            @Nullable NativeInputManagerService nativeInput) {
++        mWonadNativeInput = nativeInput;
+         mContext = context;
+         mHandler = new Handler(looper, this::handleMessage);
+         mIoHandler = new Handler(ioLooper, this::handleIoMessage);
+@@ -531,6 +577,13 @@
+     @SuppressLint("MissingPermission")
+     private void initKeyGestures() {
+         InputManager im = Objects.requireNonNull(mContext.getSystemService(InputManager.class));
++        mWonadInputManager = im;
++        org.wonad.server.input.WonadPolicyKeyAdapter.registerCleanupListener(decision -> {
++            if (!mHandler.post(() -> applyWonadPolicyCleanup(decision))) {
++                Slog.e(TAG, "Could not dispatch Wonad policy-owner cleanup");
++            }
++        });
++        im.registerInputDeviceListener(mWonadInputDeviceListener, mHandler);
+         im.registerKeyGestureEventHandler(
+                 List.of(KeyGestureEvent.KEY_GESTURE_TYPE_ACCESSIBILITY_SHORTCUT_CHORD,
+                         KeyGestureEvent.KEY_GESTURE_TYPE_ACCESSIBILITY_SHORTCUT,
+@@ -594,15 +647,14 @@
+     public long interceptKeyBeforeDispatching(IBinder focus, KeyEvent event, int policyFlags) {
+         final int keyCode = event.getKeyCode();
+ 
+-        // Cancel any pending meta actions if we see any other keys being pressed between the
+-        // down of the meta key and its corresponding up.
+-        if (mPendingMetaAction && !KeyEvent.isMetaKey(keyCode)) {
+-            mPendingMetaAction = false;
+-        }
+-        // Any key that is not Alt or Meta cancels Caps Lock combo tracking.
+-        if (mPendingCapsLockToggle && !KeyEvent.isMetaKey(keyCode) && !KeyEvent.isAltKey(keyCode)) {
+-            mPendingCapsLockToggle = false;
+-        }
++        // Preserve stock's passive pending-state bookkeeping before safety, but bind any
++        // blocked-event cleanup to its exact original Wonad claim owner.
++        final int wonadPolicyRole = wonadPolicyRole(keyCode);
++        final org.wonad.server.input.WonadPolicyKeyAdapter.Passive passive =
++                org.wonad.server.input.WonadPolicyKeyAdapter.passiveBeforeSafety(
++                        mContext, mWindowManagerInternal, event, wonadPolicyRole);
++        clearWonadMetaOwner(passive.clearMeta);
++        clearWonadCapsOwner(passive.clearCaps);
+ 
+         // Multi-key shortcuts should never be blocked by any focused window configuration
+         long result = interceptMultiKeyCombination(event);
+@@ -617,8 +669,10 @@
+             if (mWindowManagerCallbacks.interceptKeyBeforeDispatching(focus, event)) {
+                 return KEY_INTERCEPT_RESULT_CONSUMED;
+             }
+-            if (org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+-                    mContext, mWindowManagerInternal, event, policyFlags)) {
++            final org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision =
++                    org.wonad.server.input.WonadPolicyKeyAdapter.beforeStock(
++                            mContext, mWindowManagerInternal, event, wonadPolicyRole);
++            if (applyWonadPolicyDecision(focus, event, policyFlags, decision)) {
+                 return KEY_INTERCEPT_RESULT_CONSUMED;
+             }
+             SecurePasteKeyEventHandler.maybeGrantAccess(mWindowManagerInternal, focus, event);
+@@ -635,6 +689,16 @@
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+ 
++        // Generic fail-black containment is deliberately after platform safety,
++        // SecurePaste policy and the fixed Wonad alphabet, but before every stock
++        // system action or focused-window capture bypass.
++        final org.wonad.server.input.WonadPolicyKeyAdapter.Decision wonadDecision =
++                org.wonad.server.input.WonadPolicyKeyAdapter.beforeStock(
++                        mContext, mWindowManagerInternal, event, wonadPolicyRole);
++        if (applyWonadPolicyDecision(focus, event, policyFlags, wonadDecision)) {
++            return KEY_INTERCEPT_RESULT_CONSUMED;
++        }
++
+         // TODO(b/358569822) Remove below once we have nicer API for listening to shortcuts
+         if ((event.isMetaPressed() || KeyEvent.isMetaKey(event.getKeyCode()))
+                 && shouldInterceptShortcuts(focus)
+@@ -644,13 +708,8 @@
+         }
+ 
+         // Capture shortcuts and system keys that should not be sent to focused window
+-        if (mInterceptStages.get(INTERCEPT_STAGE_SHORTCUTS_BEFORE_KEY_CAPTURE).interceptKey(focus,
+-                event)) {
+-            return KEY_INTERCEPT_RESULT_CONSUMED;
+-        }
+-
+-        if (org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+-                mContext, mWindowManagerInternal, event, policyFlags)) {
++        if (mInterceptStages.get(INTERCEPT_STAGE_SHORTCUTS_BEFORE_KEY_CAPTURE).interceptKey(
++                focus, event, wonadDecision)) {
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+ 
+@@ -665,8 +724,8 @@
+         }
+ 
+         // Capture shortcuts and system keys if focused window is not capturing keys
+-        if (mInterceptStages.get(INTERCEPT_STAGE_SHORTCUTS_AFTER_KEY_CAPTURE).interceptKey(focus,
+-                event)) {
++        if (mInterceptStages.get(INTERCEPT_STAGE_SHORTCUTS_AFTER_KEY_CAPTURE).interceptKey(
++                focus, event, wonadDecision)) {
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+         if (event.isMetaPressed()) {
+@@ -685,6 +744,213 @@
+         return KEY_INTERCEPT_RESULT_NOT_CONSUMED;
+     }
+ 
++    private static int wonadPolicyRole(int keyCode) {
++        return switch (keyCode) {
++            case KeyEvent.KEYCODE_APP_SWITCH ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_APP_SWITCH;
++            case KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_META_RIGHT ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_META;
++            case KeyEvent.KEYCODE_ALT_LEFT, KeyEvent.KEYCODE_ALT_RIGHT ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ALT;
++            case KeyEvent.KEYCODE_TAB ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_TAB;
++            case KeyEvent.KEYCODE_ESCAPE ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ESCAPE;
++            default -> org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ORDINARY;
++        };
++    }
++
++    private static Throwable appendWonadPolicyFailure(@Nullable Throwable first,
++            @NonNull Throwable next) {
++        if (first == null) return next;
++        if (first != next) first.addSuppressed(next);
++        return first;
++    }
++
++    private static void rethrowWonadPolicyFailure(@Nullable Throwable failure) {
++        if (failure instanceof RuntimeException runtime) throw runtime;
++        if (failure instanceof Error fatal) throw fatal;
++        if (failure != null) {
++            throw new IllegalStateException("Wonad policy cleanup failed", failure);
++        }
++    }
++
++    /** Apply every exact cleanup object even if an earlier independent stock
++     * callback fails. The first failure remains primary and later failures are
++     * retained as suppressed evidence. */
++    private void applyWonadPolicyCleanup(
++            @NonNull org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision) {
++        Throwable failure = null;
++        try {
++            clearWonadMetaOwner(decision.clearMeta);
++        } catch (Throwable error) {
++            failure = appendWonadPolicyFailure(failure, error);
++        }
++        try {
++            clearWonadCapsOwner(decision.clearCaps);
++        } catch (Throwable error) {
++            failure = appendWonadPolicyFailure(failure, error);
++        }
++        try {
++            if (clearWonadAltTabOwner(decision.finishAltTab)) {
++                final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent owner =
++                        org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(
++                                decision.finishAltTab);
++                handleKeyGesture(owner.device, new int[]{KeyEvent.KEYCODE_TAB},
++                        KeyEvent.META_ALT_ON,
++                        KeyGestureEvent.KEY_GESTURE_TYPE_RECENT_APPS_SWITCHER,
++                        KeyGestureEvent.ACTION_GESTURE_COMPLETE, owner.display,
++                        (IBinder) owner.focus, KeyGestureEvent.FLAG_CANCELLED,
++                        /* appLaunchData = */ null);
++            }
++        } catch (Throwable error) {
++            failure = appendWonadPolicyFailure(failure, error);
++        }
++        try {
++            if (decision.cancelRecent != null) {
++                final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent owner =
++                        org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(
++                                decision.cancelRecent);
++                final Object dispatch =
++                        org.wonad.server.input.WonadPolicyKeyAdapter.beginRecentDispatch(
++                                decision.cancelRecent,
++                                org.wonad.server.input.WonadPolicyKeyAdapter.DISPATCH_CANCEL);
++                try {
++                    handleKeyGesture(owner.device, new int[]{KeyEvent.KEYCODE_APP_SWITCH},
++                            /* modifierState = */ 0,
++                            KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
++                            KeyGestureEvent.ACTION_GESTURE_COMPLETE, owner.display,
++                            (IBinder) owner.focus, KeyGestureEvent.FLAG_CANCELLED,
++                            /* appLaunchData = */ null);
++                } finally {
++                    org.wonad.server.input.WonadPolicyKeyAdapter.endRecentDispatch(dispatch);
++                }
++            }
++        } catch (Throwable error) {
++            failure = appendWonadPolicyFailure(failure, error);
++        }
++        for (Object pending : decision.cancelEscapes) {
++            try {
++                cancelWonadEscape(pending);
++            } catch (Throwable error) {
++                failure = appendWonadPolicyFailure(failure, error);
++            }
++        }
++        rethrowWonadPolicyFailure(failure);
++    }
++
++    /** Compensate a failed owner-install callback without hiding its original
++     * exception. Both the displaced-owner cleanup and the newly published
++     * owner rollback are exact-identity operations and must be attempted. */
++    private void rollbackWonadPolicyInstall(
++            @NonNull org.wonad.server.input.WonadPolicyKeyAdapter.Decision cleanup,
++            @NonNull org.wonad.server.input.WonadPolicyKeyAdapter.Decision rollback) {
++        Throwable failure = null;
++        try {
++            applyWonadPolicyCleanup(cleanup);
++        } catch (Throwable error) {
++            failure = error;
++        }
++        try {
++            applyWonadPolicyCleanup(rollback);
++        } catch (Throwable error) {
++            if (failure == null) {
++                failure = error;
++            } else if (failure != error) {
++                failure.addSuppressed(error);
++            }
++        }
++        rethrowWonadPolicyFailure(failure);
++    }
++
++    private void rollbackWonadOwnerInstall(
++            @NonNull org.wonad.server.input.WonadPolicyKeyAdapter.OwnerInstall install) {
++        rollbackWonadPolicyInstall(install.cleanup, install.rollback);
++    }
++
++    /** Escape has no Java owner mirror, but a START or delayed completion may
++     * already have escaped before the callback failed. Cancel every exact
++     * owner carried by the pure helper's rollback decision. */
++    private void rollbackWonadEscapeInstall(
++            @NonNull org.wonad.server.input.WonadPolicyKeyAdapter.EscapeInstall install) {
++        rollbackWonadPolicyInstall(install.cleanup, install.rollback);
++    }
++
++    private boolean clearWonadMetaOwner(@Nullable Object expected) {
++        if (expected == null || !mWonadPendingMetaOwner.compareAndSet(expected, null)) {
++            return false;
++        }
++        mPendingMetaAction = false;
++        return true;
++    }
++
++    private boolean clearWonadCapsOwner(@Nullable Object expected) {
++        if (expected == null || !mWonadPendingCapsOwner.compareAndSet(expected, null)) {
++            return false;
++        }
++        mPendingCapsLockToggle = false;
++        return true;
++    }
++
++    private boolean clearWonadAltTabOwner(@Nullable Object expected) {
++        if (expected == null || !mWonadPendingAltTabOwner.compareAndSet(expected, null)) {
++            return false;
++        }
++        mPendingHideRecentSwitcher = false;
++        return true;
++    }
++
++    private void cancelWonadEscape(@NonNull Object pending) {
++        final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent owner =
++                org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(pending);
++        mHandler.removeMessages(MSG_EXIT_FOCUSED_APP, owner.completion);
++        handleKeyGesture(owner.device, new int[]{KeyEvent.KEYCODE_ESCAPE},
++                /* modifierState = */ 0,
++                KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
++                KeyGestureEvent.ACTION_GESTURE_COMPLETE, owner.display,
++                (IBinder) owner.focus, KeyGestureEvent.FLAG_CANCELLED,
++                /* appLaunchData = */ null);
++    }
++
++    private boolean applyWonadPolicyDecision(@Nullable IBinder focusedToken,
++            @NonNull KeyEvent event, int policyFlags,
++            @NonNull org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision) {
++        applyWonadPolicyCleanup(decision);
++        final boolean consumed = org.wonad.server.input.WonadPolicyKeyAdapter.consume(
++                mWindowManagerInternal, event, policyFlags, decision);
++        if (decision.saturated
++                && (event.getAction() == KeyEvent.ACTION_UP || event.isCanceled())) {
++            reconcileWonadPolicyDevices();
++        }
++        return consumed;
++    }
++
++    /** Release fail-black saturation only after an exact native physical census. */
++    private void reconcileWonadPolicyDevices() {
++        final InputManager input = mWonadInputManager;
++        final NativeInputManagerService nativeInput = mWonadNativeInput;
++        if (input == null || nativeInput == null) return;
++        final long expectedEpoch =
++                org.wonad.server.input.WonadPolicyKeyAdapter.mutationEpoch();
++        boolean allKeysReleased = true;
++        for (int keyCode = KeyEvent.KEYCODE_UNKNOWN;
++                keyCode <= KeyEvent.getMaxKeyCode(); keyCode++) {
++            final int state = nativeInput.getKeyCodeState(
++                    /* deviceId = */ -1, InputDevice.SOURCE_ANY, keyCode);
++            if (state == InputManagerService.KEY_STATE_DOWN
++                    || state == InputManagerService.KEY_STATE_VIRTUAL
++                    || (state != InputManagerService.KEY_STATE_UP
++                            && state != InputManagerService.KEY_STATE_UNKNOWN)) {
++                allKeysReleased = false;
++                break;
++            }
++        }
++        final org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision =
++                org.wonad.server.input.WonadPolicyKeyAdapter.reconcileDevices(
++                        input.getInputDeviceIds(), allKeysReleased, expectedEpoch);
++        applyWonadPolicyCleanup(decision);
++    }
++
+     private long interceptMultiKeyCombination(@NonNull KeyEvent event) {
+         if (mKeyCombinationManager.isKeyConsumed(event)) {
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+@@ -723,7 +989,8 @@
+ 
+     @SuppressLint("MissingPermission")
+     private boolean interceptShortcutsBeforeKeyCapture(@Nullable IBinder focusedToken,
+-            @NonNull KeyEvent event) {
++            @NonNull KeyEvent event,
++            @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision wonadDecision) {
+         if (DEBUG) {
+             Slog.d(TAG, "interceptShortcutsBeforeKeyCapture: event = " + event);
+         }
+@@ -762,18 +1029,59 @@
+                 }
+                 break;
+             case KeyEvent.KEYCODE_APP_SWITCH:
+-                if (firstDown && !hasModifiers) {
+-                    handleKeyGesture(deviceId, new int[]{keyCode}, /* modifierState = */0,
+-                            KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
+-                            KeyGestureEvent.ACTION_GESTURE_START, displayId,
+-                            focusedToken, /* flags = */0, /* appLaunchData = */null);
++                if (firstDown && !hasModifiers && wonadDecision != null
++                        && wonadDecision.pair != null) {
++                    org.wonad.server.input.WonadPolicyKeyAdapter.installRecent(
++                            mContext, mWindowManagerInternal, wonadDecision.pair, focusedToken,
++                            install -> {
++                                applyWonadPolicyCleanup(install.cleanup);
++                                final Object dispatch = org.wonad.server.input
++                                        .WonadPolicyKeyAdapter.beginRecentDispatch(
++                                                install.owner,
++                                                org.wonad.server.input.WonadPolicyKeyAdapter
++                                                        .DISPATCH_START);
++                                try {
++                                    handleKeyGesture(deviceId, new int[]{keyCode},
++                                            /* modifierState = */0,
++                                            KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
++                                            KeyGestureEvent.ACTION_GESTURE_START, displayId,
++                                            focusedToken, /* flags = */0,
++                                            /* appLaunchData = */null);
++                                } finally {
++                                    org.wonad.server.input.WonadPolicyKeyAdapter
++                                            .endRecentDispatch(dispatch);
++                                }
++                            }, this::rollbackWonadOwnerInstall);
++                    // A lifecycle transition which wins installation is still
++                    // fail-closed; no stock START is sent.
+                     return true;
+-                } else if (!down && !hasModifiers) {
+-                    handleKeyGesture(deviceId, new int[]{keyCode}, /* modifierState = */0,
+-                            KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
+-                            KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId,
+-                            focusedToken, canceled ? KeyGestureEvent.FLAG_CANCELLED : 0,
+-                            /* appLaunchData = */null);
++                } else if (!down && !hasModifiers && wonadDecision != null
++                        && wonadDecision.pair != null) {
++                    final Object owner =
++                            org.wonad.server.input.WonadPolicyKeyAdapter.completeRecent(
++                                    wonadDecision.pair);
++                    if (owner == null) break;
++                    final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent original =
++                            org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(owner);
++                    final Object dispatch =
++                            org.wonad.server.input.WonadPolicyKeyAdapter.beginRecentDispatch(
++                                    owner,
++                                    canceled
++                                            ? org.wonad.server.input.WonadPolicyKeyAdapter
++                                                    .DISPATCH_CANCEL
++                                            : org.wonad.server.input.WonadPolicyKeyAdapter
++                                                    .DISPATCH_COMPLETE);
++                    try {
++                        handleKeyGesture(original.device,
++                                new int[]{KeyEvent.KEYCODE_APP_SWITCH}, /* modifierState = */0,
++                                KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH,
++                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, original.display,
++                                (IBinder) original.focus,
++                                canceled ? KeyGestureEvent.FLAG_CANCELLED : 0,
++                                /* appLaunchData = */null);
++                    } finally {
++                        org.wonad.server.input.WonadPolicyKeyAdapter.endRecentDispatch(dispatch);
++                    }
+                     return true;
+                 }
+                 break;
+@@ -867,34 +1175,44 @@
+                 }
+                 break;
+             case KeyEvent.KEYCODE_ESCAPE:
+-                // TODO(b/358569822): Currently implemented long press using handler and delayed
+-                //  message here, instead of using SingleKeyGestureDetector because that detection
+-                //  logic doesn't have access to focused token. Refactor this so that we don't
+-                //  have this custom logic to detect long press.
+-                if (firstDown && canFocusedWindowCaptureKeys(focusedToken)) {
+-                    // Toast to quit application is shown on key down for ESCAPE key, when the
+-                    // focused window is capturing keys.
+-                    Toast.makeText(mContext, UiThread.get().getLooper(),
+-                            mContext.getString(R.string.exit_toast_on_long_press_escape),
+-                            Toast.LENGTH_SHORT).show();
+-                    handleKeyGesture(event.getDeviceId(), new int[]{KeyEvent.KEYCODE_ESCAPE},
+-                            metaState, KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
+-                            KeyGestureEvent.ACTION_GESTURE_START,
+-                            displayId, focusedToken, /* flags= */0, /* appLaunchData= */ null);
+-                    AidlKeyGestureEvent eventToSend = createKeyGestureEvent(event.getDeviceId(),
+-                            new int[]{KeyEvent.KEYCODE_ESCAPE},
+-                            metaState, KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
+-                            KeyGestureEvent.ACTION_GESTURE_COMPLETE,
+-                            displayId, /* flags= */0, /* appLaunchData= */ null);
+-                    Message msg = Message.obtain(mHandler, MSG_EXIT_FOCUSED_APP, eventToSend);
+-                    mHandler.sendMessageDelayed(msg, LONG_PRESS_DURATION_FOR_EXIT_APP_MS);
+-                } else if (!down) {
+-                    if (mHandler.hasMessages(MSG_EXIT_FOCUSED_APP)) {
+-                        mHandler.removeMessages(MSG_EXIT_FOCUSED_APP);
+-                        handleKeyGesture(event.getDeviceId(), new int[]{KeyEvent.KEYCODE_ESCAPE},
+-                                metaState, KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
+-                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId, focusedToken,
+-                                KeyGestureEvent.FLAG_CANCELLED, /* appLaunchData= */ null);
++                // The delayed completion is owned by this exact physical pair,
++                // original claim attachment and original focus token.
++                if (firstDown && canFocusedWindowCaptureKeys(focusedToken)
++                        && wonadDecision != null && wonadDecision.pair != null) {
++                    final AidlKeyGestureEvent eventToSend = createKeyGestureEvent(
++                            event.getDeviceId(), new int[]{KeyEvent.KEYCODE_ESCAPE}, metaState,
++                            KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
++                            KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId,
++                            /* flags= */0, /* appLaunchData= */ null);
++                    org.wonad.server.input.WonadPolicyKeyAdapter.installEscape(
++                            mContext, mWindowManagerInternal, wonadDecision.pair, focusedToken,
++                            eventToSend, install -> {
++                                if (install.replaced != null) {
++                                    cancelWonadEscape(install.replaced);
++                                }
++                                Toast.makeText(mContext, UiThread.get().getLooper(),
++                                        mContext.getString(
++                                                R.string.exit_toast_on_long_press_escape),
++                                        Toast.LENGTH_SHORT).show();
++                                handleKeyGesture(event.getDeviceId(),
++                                        new int[]{KeyEvent.KEYCODE_ESCAPE}, metaState,
++                                        KeyGestureEvent.KEY_GESTURE_TYPE_QUIT_FOCUSED_TASK,
++                                        KeyGestureEvent.ACTION_GESTURE_START, displayId,
++                                        focusedToken, /* flags= */0,
++                                        /* appLaunchData= */ null);
++                                final Message msg = Message.obtain(
++                                        mHandler, MSG_EXIT_FOCUSED_APP, eventToSend);
++                                mHandler.sendMessageDelayed(
++                                        msg, LONG_PRESS_DURATION_FOR_EXIT_APP_MS);
++                            }, this::rollbackWonadEscapeInstall);
++                    return true;
++                } else if (!down && wonadDecision != null && wonadDecision.pair != null) {
++                    final Object owner =
++                            org.wonad.server.input.WonadPolicyKeyAdapter.completeEscapePair(
++                                    wonadDecision.pair);
++                    if (owner != null) {
++                        cancelWonadEscape(owner);
++                        return true;
+                     }
+                 }
+                 break;
+@@ -972,7 +1290,8 @@
+ 
+     @SuppressLint("MissingPermission")
+     private boolean interceptShortcutsAfterKeyCapture(@Nullable IBinder focusedToken,
+-            @NonNull KeyEvent event) {
++            @NonNull KeyEvent event,
++            @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision wonadDecision) {
+         if (DEBUG) {
+             Slog.d(TAG, "interceptShortcutsAfterKeyCapture: event = " + event);
+         }
+@@ -988,6 +1307,7 @@
+         final int displayId = event.getDisplayId();
+         final int deviceId = event.getDeviceId();
+         final boolean firstDown = down && repeatCount == 0;
++        final Object wonadPair = wonadDecision != null ? wonadDecision.pair : null;
+ 
+         // Handle stateful shortcuts (only if key capture is not enabled)
+         switch (keyCode) {
+@@ -995,48 +1315,91 @@
+             case KeyEvent.KEYCODE_META_RIGHT:
+                 if (down) {
+                     if (event.isAltPressed()) {
+-                        mPendingCapsLockToggle = true;
+-                        mPendingMetaAction = false;
++                        final Object altPair =
++                                org.wonad.server.input.WonadPolicyKeyAdapter.activePair(
++                                        deviceId,
++                                        org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ALT);
++                        if (wonadPair != null && altPair != null) {
++                            if (!org.wonad.server.input.WonadPolicyKeyAdapter.installCaps(
++                                    mContext, mWindowManagerInternal, wonadPair, altPair,
++                                    focusedToken, install -> {
++                                        applyWonadPolicyCleanup(install.cleanup);
++                                        mWonadPendingCapsOwner.set(install.owner);
++                                        mPendingCapsLockToggle = true;
++                                    }, this::rollbackWonadOwnerInstall)) {
++                                return true;
++                            }
++                        }
+                     } else {
+-                        mPendingCapsLockToggle = false;
+-                        mPendingMetaAction = true;
++                        if (wonadPair != null) {
++                            if (!org.wonad.server.input.WonadPolicyKeyAdapter.installMeta(
++                                    mContext, mWindowManagerInternal, wonadPair, focusedToken,
++                                    install -> {
++                                        applyWonadPolicyCleanup(install.cleanup);
++                                        mWonadPendingMetaOwner.set(install.owner);
++                                        mPendingMetaAction = true;
++                                    }, this::rollbackWonadOwnerInstall)) {
++                                return true;
++                            }
++                        }
+                     }
+                 } else {
+-                    // Toggle Caps Lock on META-ALT.
+-                    if (mPendingCapsLockToggle) {
+-                        mPendingCapsLockToggle = false;
+-                        handleKeyGesture(deviceId, new int[]{KeyEvent.KEYCODE_META_LEFT,
+-                                        KeyEvent.KEYCODE_ALT_LEFT}, /* modifierState = */0,
++                    final Object capsOwner = wonadPair == null ? null :
++                            org.wonad.server.input.WonadPolicyKeyAdapter.completeCaps(wonadPair);
++                    if (capsOwner != null && clearWonadCapsOwner(capsOwner)) {
++                        final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent owner =
++                                org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(capsOwner);
++                        handleKeyGesture(owner.device,
++                                new int[]{KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_ALT_LEFT},
++                                /* modifierState = */0,
+                                 KeyGestureEvent.KEY_GESTURE_TYPE_TOGGLE_CAPS_LOCK,
+-                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId,
+-                                focusedToken, /* flags = */0, /* appLaunchData = */null);
+-
+-                    } else if (mPendingMetaAction) {
+-                        mPendingMetaAction = false;
+-                        if (!canceled) {
+-                            handleKeyGesture(deviceId, new int[]{keyCode},
+-                                    /* modifierState = */0,
+-                                    KeyGestureEvent.KEY_GESTURE_TYPE_ALL_APPS,
+-                                    KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId,
+-                                    focusedToken, /* flags = */0, /* appLaunchData = */null);
++                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, owner.display,
++                                (IBinder) owner.focus, /* flags = */0,
++                                /* appLaunchData = */null);
++                    } else {
++                        final Object metaOwner = wonadPair == null ? null :
++                                org.wonad.server.input.WonadPolicyKeyAdapter.completeMeta(
++                                        wonadPair);
++                        if (metaOwner != null && clearWonadMetaOwner(metaOwner)) {
++                            if (!canceled) {
++                                final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent owner =
++                                        org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(
++                                                metaOwner);
++                                handleKeyGesture(owner.device, new int[]{owner.keyCode},
++                                        /* modifierState = */0,
++                                        KeyGestureEvent.KEY_GESTURE_TYPE_ALL_APPS,
++                                        KeyGestureEvent.ACTION_GESTURE_COMPLETE, owner.display,
++                                        (IBinder) owner.focus, /* flags = */0,
++                                        /* appLaunchData = */null);
++                            }
+                         }
+                     }
+                 }
+                 return true;
+             case KeyEvent.KEYCODE_TAB:
+                 if (firstDown) {
+-                    if (!mPendingHideRecentSwitcher) {
++                    if (wonadPair != null) {
+                         final int shiftlessModifiers =
+                                 event.getModifiers() & ~KeyEvent.META_SHIFT_MASK;
+                         if (KeyEvent.metaStateHasModifiers(
+                                 shiftlessModifiers, KeyEvent.META_ALT_ON)) {
+-                            mPendingHideRecentSwitcher = true;
+-                            handleKeyGesture(deviceId, new int[]{keyCode},
+-                                    KeyEvent.META_ALT_ON,
+-                                    KeyGestureEvent.KEY_GESTURE_TYPE_RECENT_APPS_SWITCHER,
+-                                    KeyGestureEvent.ACTION_GESTURE_START, displayId,
+-                                    focusedToken, /* flags = */0, /* appLaunchData = */null);
+-                            return true;
++                            if (wonadPair != null) {
++                                org.wonad.server.input.WonadPolicyKeyAdapter.installAltTab(
++                                        mContext, mWindowManagerInternal, wonadPair, focusedToken,
++                                        install -> {
++                                            applyWonadPolicyCleanup(install.cleanup);
++                                            mWonadPendingAltTabOwner.set(install.owner);
++                                            mPendingHideRecentSwitcher = true;
++                                            handleKeyGesture(deviceId, new int[]{keyCode},
++                                                    KeyEvent.META_ALT_ON,
++                                                    KeyGestureEvent
++                                                            .KEY_GESTURE_TYPE_RECENT_APPS_SWITCHER,
++                                                    KeyGestureEvent.ACTION_GESTURE_START,
++                                                    displayId, focusedToken, /* flags = */0,
++                                                    /* appLaunchData = */null);
++                                        }, this::rollbackWonadOwnerInstall);
++                                return true;
++                            }
+                         }
+                     }
+                 }
+@@ -1045,30 +1408,56 @@
+             case KeyEvent.KEYCODE_ALT_RIGHT:
+                 if (down) {
+                     if (event.isMetaPressed()) {
+-                        mPendingCapsLockToggle = true;
+-                        mPendingMetaAction = false;
++                        final Object metaPair =
++                                org.wonad.server.input.WonadPolicyKeyAdapter.activePair(
++                                        deviceId,
++                                        org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_META);
++                        if (wonadPair != null && metaPair != null) {
++                            if (!org.wonad.server.input.WonadPolicyKeyAdapter.installCaps(
++                                    mContext, mWindowManagerInternal, metaPair, wonadPair,
++                                    focusedToken, install -> {
++                                        applyWonadPolicyCleanup(install.cleanup);
++                                        mWonadPendingCapsOwner.set(install.owner);
++                                        mPendingCapsLockToggle = true;
++                                    }, this::rollbackWonadOwnerInstall)) {
++                                return true;
++                            }
++                        }
+                     } else {
+-                        mPendingCapsLockToggle = false;
++                        if (wonadPair != null) {
++                            clearWonadCapsOwner(org.wonad.server.input.WonadPolicyKeyAdapter
++                                    .clearCapsForAllowedPair(mContext, mWindowManagerInternal,
++                                            wonadPair));
++                        }
+                     }
+                 } else {
+-                    if (mPendingHideRecentSwitcher) {
+-                        mPendingHideRecentSwitcher = false;
+-                        handleKeyGesture(deviceId, new int[]{KeyEvent.KEYCODE_TAB},
++                    final Object altTabOwner = wonadPair == null ? null :
++                            org.wonad.server.input.WonadPolicyKeyAdapter.completeAltTab(wonadPair);
++                    if (altTabOwner != null && clearWonadAltTabOwner(altTabOwner)) {
++                        final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent owner =
++                                org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(
++                                        altTabOwner);
++                        handleKeyGesture(owner.device, new int[]{KeyEvent.KEYCODE_TAB},
+                                 KeyEvent.META_ALT_ON,
+                                 KeyGestureEvent.KEY_GESTURE_TYPE_RECENT_APPS_SWITCHER,
+-                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId,
+-                                focusedToken, /* flags = */0, /* appLaunchData = */null);
++                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, owner.display,
++                                (IBinder) owner.focus, /* flags = */0,
++                                /* appLaunchData = */null);
+                         return true;
+                     }
+ 
+-                    // Toggle Caps Lock on META-ALT.
+-                    if (mPendingCapsLockToggle) {
+-                        mPendingCapsLockToggle = false;
+-                        handleKeyGesture(deviceId, new int[]{KeyEvent.KEYCODE_META_LEFT,
+-                                        KeyEvent.KEYCODE_ALT_LEFT}, /* modifierState = */0,
++                    final Object capsOwner = wonadPair == null ? null :
++                            org.wonad.server.input.WonadPolicyKeyAdapter.completeCaps(wonadPair);
++                    if (capsOwner != null && clearWonadCapsOwner(capsOwner)) {
++                        final org.wonad.server.input.WonadPolicyKeyAdapter.OwnerEvent owner =
++                                org.wonad.server.input.WonadPolicyKeyAdapter.ownerEvent(capsOwner);
++                        handleKeyGesture(owner.device,
++                                new int[]{KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_ALT_LEFT},
++                                /* modifierState = */0,
+                                 KeyGestureEvent.KEY_GESTURE_TYPE_TOGGLE_CAPS_LOCK,
+-                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, displayId,
+-                                focusedToken, /* flags = */0, /* appLaunchData = */null);
++                                KeyGestureEvent.ACTION_GESTURE_COMPLETE, owner.display,
++                                (IBinder) owner.focus, /* flags = */0,
++                                /* appLaunchData = */null);
+                         return true;
+                     }
+                 }
+@@ -1206,18 +1595,26 @@
+     }
+ 
+     boolean interceptUnhandledKey(@NonNull KeyEvent event, @Nullable IBinder focus) {
++        final org.wonad.server.input.WonadPolicyKeyAdapter.Decision wonadDecision =
++                org.wonad.server.input.WonadPolicyKeyAdapter.beforeStock(
++                        mContext, mWindowManagerInternal, event,
++                        wonadPolicyRole(event.getKeyCode()));
++        if (applyWonadPolicyDecision(focus, event, /* policyFlags = */ 0, wonadDecision)) {
++            return true;
++        }
+         // A paste chord must not become a global or custom shortcut after the app declines it.
+         if (SecurePasteKeyEventHandler.isPasteKeyEvent(event)) {
+             return org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+                     mContext, mWindowManagerInternal, event, /* policyFlags= */ 0);
+         }
+         final boolean intercepted = mInterceptStages.get(
+-                INTERCEPT_STAGE_UNHANDLED_SHORTCUTS).interceptKey(focus, event);
++                INTERCEPT_STAGE_UNHANDLED_SHORTCUTS).interceptKey(focus, event, wonadDecision);
+         return intercepted || org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+                 mContext, mWindowManagerInternal, event, /* policyFlags= */ 0);
+     }
+ 
+-    private boolean interceptUnhandledShortcuts(IBinder focusedToken, KeyEvent event) {
++    private boolean interceptUnhandledShortcuts(IBinder focusedToken, KeyEvent event,
++            @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision wonadDecision) {
+         if (org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+                 mContext, mWindowManagerInternal, event, /* policyFlags= */ 0)) {
+             return true;
+@@ -1465,7 +1862,10 @@
+                 takeScreenshot(msg.arg1, msg.arg2);
+                 break;
+             case MSG_EXIT_FOCUSED_APP:
+-                handleKeyGesture((AidlKeyGestureEvent) msg.obj, /* focusedToken= */null);
++                org.wonad.server.input.WonadPolicyKeyAdapter.dispatchEscape(
++                        mContext, mWindowManagerInternal, msg.obj,
++                        pending -> handleKeyGesture((AidlKeyGestureEvent) msg.obj,
++                                (IBinder) pending.focus));
+                 break;
+         }
+         return true;
+@@ -1991,35 +2391,54 @@
+     //  determine whether to consume shortcuts or not.
+     private abstract static class InterceptKeyStage {
+ 
+-        /** Currently fully consumed key codes per device */
+-        private final SparseArray<Set<Integer>> mConsumedKeysForDevice = new SparseArray<>();
+-
+-        private boolean interceptKey(@Nullable IBinder focusedToken, @NonNull KeyEvent event) {
++        /** Exact fully-consumed physical key pairs per device. */
++        private final SparseArray<Map<Integer, Long>> mConsumedKeysForDevice =
++                new SparseArray<>();
++
++        private boolean interceptKey(@Nullable IBinder focusedToken, @NonNull KeyEvent event,
++                @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision) {
+             final int deviceId = event.getDeviceId();
+             final int keyCode = event.getKeyCode();
+-            Set<Integer> consumedKeys = mConsumedKeysForDevice.get(deviceId);
++            final long downTime = event.getDownTime();
++            Map<Integer, Long> consumedKeys = mConsumedKeysForDevice.get(deviceId);
+             if (consumedKeys == null) {
+-                consumedKeys = new HashSet<>();
++                consumedKeys = new HashMap<>();
+                 mConsumedKeysForDevice.put(deviceId, consumedKeys);
+             }
+ 
+-            if (onKeyEvent(focusedToken, event) && event.getAction() == KeyEvent.ACTION_DOWN
++            // A fresh repeat-zero DOWN retires a lost-UP stage record.  A late
++            // old UP can neither consume nor remove the replacement record.
++            final Long oldDownTime = consumedKeys.get(keyCode);
++            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0
++                    && oldDownTime != null && oldDownTime.longValue() != downTime) {
++                consumedKeys.remove(keyCode);
++            }
++            if (onKeyEvent(focusedToken, event, decision)
++                    && event.getAction() == KeyEvent.ACTION_DOWN
+                     && event.getRepeatCount() == 0) {
+-                consumedKeys.add(keyCode);
++                consumedKeys.put(keyCode, downTime);
+                 return true;
+             }
+ 
+-            boolean needToConsumeKey = consumedKeys.contains(keyCode);
+-            if (event.getAction() == KeyEvent.ACTION_UP || event.isCanceled()) {
++            final Long retainedDownTime = consumedKeys.get(keyCode);
++            final boolean needToConsumeKey = retainedDownTime != null
++                    && retainedDownTime.longValue() == downTime;
++            if ((event.getAction() == KeyEvent.ACTION_UP || event.isCanceled())
++                    && needToConsumeKey) {
+                 consumedKeys.remove(keyCode);
+-                if (consumedKeys.isEmpty()) {
+-                    mConsumedKeysForDevice.remove(deviceId);
+-                }
++            }
++            if (consumedKeys.isEmpty()) {
++                mConsumedKeysForDevice.remove(deviceId);
+             }
+             return needToConsumeKey;
+         }
+ 
++        private void removeDevice(int deviceId) {
++            mConsumedKeysForDevice.remove(deviceId);
++        }
++
+         protected abstract boolean onKeyEvent(@Nullable IBinder focusedToken,
+-                @NonNull KeyEvent event);
++                @NonNull KeyEvent event,
++                @Nullable org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision);
+     }
+ }
+--- a/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -468,6 +468,8 @@
+     private WallpaperManagerInternal mWallpaperManagerInternal;
+ 
+     boolean mPreloadedRecentApps;
++    // Exact Kotlin physical-pair owner, or null for stock HOME/touch/other preload.
++    Object mWonadPreloadedRecentAppsOwner;
+     final Object mServiceAcquireLock = new Object();
+     Vibrator mVibrator; // Vibrator for giving feedback of orientation changes
+     AccessibilityManager mAccessibilityManager;
+@@ -3500,11 +3502,36 @@
+                 }
+                 break;
+             case KeyGestureEvent.KEY_GESTURE_TYPE_APP_SWITCH:
+-                if (!keyguardOn) {
++                if (event.isCancelled()) {
++                    final Object owner =
++                            org.wonad.server.input.WonadPolicyKeyAdapter
++                                    .currentRecentDispatch(
++                                            org.wonad.server.input
++                                                    .WonadPolicyKeyAdapter.DISPATCH_CANCEL);
++                    if (owner != null && owner == mWonadPreloadedRecentAppsOwner) {
++                        cancelPreloadRecentApps();
++                    }
++                } else if (complete && keyguardOn) {
++                    final Object owner =
++                            org.wonad.server.input.WonadPolicyKeyAdapter
++                                    .currentRecentDispatch(
++                                            org.wonad.server.input
++                                                    .WonadPolicyKeyAdapter.DISPATCH_COMPLETE);
++                    if (owner != null && owner == mWonadPreloadedRecentAppsOwner) {
++                        cancelPreloadRecentApps();
++                    }
++                } else if (!keyguardOn) {
+                     if (start) {
+                         preloadRecentApps();
+                     } else if (complete) {
+-                        toggleRecentApps();
++                        final Object owner =
++                                org.wonad.server.input.WonadPolicyKeyAdapter
++                                        .currentRecentDispatch(
++                                                org.wonad.server.input
++                                                        .WonadPolicyKeyAdapter.DISPATCH_COMPLETE);
++                        if (owner != null && owner == mWonadPreloadedRecentAppsOwner) {
++                            toggleRecentApps();
++                        }
+                     }
+                 }
+                 break;
+@@ -4132,6 +4159,9 @@
+     }
+ 
+     private void preloadRecentApps() {
++        mWonadPreloadedRecentAppsOwner =
++                org.wonad.server.input.WonadPolicyKeyAdapter.currentRecentDispatch(
++                        org.wonad.server.input.WonadPolicyKeyAdapter.DISPATCH_START);
+         mPreloadedRecentApps = true;
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+@@ -4140,6 +4170,7 @@
+     }
+ 
+     private void cancelPreloadRecentApps() {
++        mWonadPreloadedRecentAppsOwner = null;
+         if (mPreloadedRecentApps) {
+             mPreloadedRecentApps = false;
+             StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+@@ -4158,6 +4189,7 @@
+ 
+     private void toggleRecentApps() {
+         mPreloadedRecentApps = false; // preloading no longer needs to be canceled
++        mWonadPreloadedRecentAppsOwner = null;
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+             statusbar.toggleRecentApps();
+@@ -4172,6 +4204,7 @@
+ 
+     private void showRecentApps(boolean triggeredFromAltTab) {
+         mPreloadedRecentApps = false; // preloading no longer needs to be canceled
++        mWonadPreloadedRecentAppsOwner = null;
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+             statusbar.showRecentApps(triggeredFromAltTab);
+@@ -4195,6 +4228,7 @@
+ 
+     private void hideRecentApps(boolean triggeredFromAltTab, boolean triggeredFromHome) {
+         mPreloadedRecentApps = false; // preloading no longer needs to be canceled
++        mWonadPreloadedRecentAppsOwner = null;
+         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+         if (statusbar != null) {
+             statusbar.hideRecentApps(triggeredFromAltTab, triggeredFromHome);

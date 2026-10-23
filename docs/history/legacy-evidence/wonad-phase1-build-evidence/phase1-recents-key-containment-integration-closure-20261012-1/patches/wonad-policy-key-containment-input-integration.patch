@@ -1,0 +1,1364 @@
+--- a/android/input-integration/src/org/wonad/server/input/WonadInputBridge.kt
++++ b/android/input-integration/src/org/wonad/server/input/WonadInputBridge.kt
+@@ -103,6 +103,10 @@
+      * replacement token until this exact cleanup completes. A delayed old
+      * callback therefore cannot release replacement Rust state. */
+     @JvmStatic internal fun onUiClaimRetired(expected: WonadUiBridge.ShortcutClaim) {
++        // UiBridge has already unpublished this exact identity; the helper can
++        // now discard its temporary lifecycle override. Retained pairs remain
++        // independently draining by exact physical identity.
++        WonadPolicyKeyAdapter.onClaimRetired(expected)
+         val owner = synchronized(lock) { owners[expected.display] }
+         if (owner?.claim === expected) clear(owner)
+     }
+@@ -245,7 +249,8 @@
+         val owner = exactOwner(display)
+         val invalid = state != null && try {
+             val now = SystemClock.elapsedRealtime()
+-            !claimActive(context, wm, state, now) ||
++            WonadPolicyKeyAdapter.claimBlocked(state.claim) ||
++                !claimActive(context, wm, state, now) ||
+                 (owner != null && !ownerActive(context, wm, owner, state, now))
+         } catch (error: Throwable) {
+             if (error !is Exception && error !is LinkageError) throw error
+@@ -253,6 +258,32 @@
+             true
+         }
+         return WonadUiBridge.consumeInput(display) || failedBridgeConsumes(display) || invalid
++    }
++
++    /** Lifecycle callbacks are private system_server wiring. Exact claim
++     * identity is preserved; no public Binder or SDK surface is added. */
++    @JvmStatic internal fun onUiClaimContainmentChanged(
++        expected: WonadUiBridge.ShortcutClaim, blocked: Boolean) {
++        WonadPolicyKeyAdapter.onClaimContainmentChanged(expected, blocked)
++    }
++
++    @JvmStatic internal fun onUiClaimRetiring(expected: WonadUiBridge.ShortcutClaim) {
++        WonadPolicyKeyAdapter.onClaimRetiring(expected)
++    }
++
++    /** Private read-only primitive for the exact Kotlin policy-pair adapter. */
++    internal fun policyClaimBlocked(context: Context, wm: WindowManagerInternal,
++        display: Int): Boolean = claimedInputBlocked(context, wm, display)
++
++    /** Observe the original KeyEvent only; never substitute its display id.
++     * The optional retained claim selects only the old private input owner/user
++     * metadata; it cannot make the event eligible or create a command. */
++    internal fun policyDrainContained(wm: WindowManagerInternal, event: KeyEvent,
++        policyFlags: Int, claim: WonadUiBridge.ShortcutClaim?) {
++        val owner = claim?.let { retained -> synchronized(lock) {
++            owners[retained.display]?.takeIf { it.claim === retained }
++        } }
++        drainContained(wm, event, policyFlags, owner)
+     }
+ 
+     /** Early policy seam for paste/action/app-capture branches which return
+--- a/android/input-integration/src/com/android/server/wm/WonadUiBridge.kt
++++ b/android/input-integration/src/com/android/server/wm/WonadUiBridge.kt
+@@ -96,10 +96,29 @@
+         display in blankDisplays || display in protectedInputDisplays
+ 
+     private fun publishInputContainment() {
+-        blankDisplays = claims.values.filter { it.blank }.map { it.dc.displayId }.toSet() +
++        val nextBlank = claims.values.filter { it.blank }.map { it.dc.displayId }.toSet() +
+             departingInputBarriers.keys
+-        protectedInputDisplays = claims.values.filter { it.protectedInput }
++        val nextProtected = claims.values.filter { it.protectedInput }
+             .map { it.dc.displayId }.toSet()
++        val before = blankDisplays + protectedInputDisplays
++        val after = nextBlank + nextProtected
++        // Publish exact-claim policy containment before the lock-free UI
++        // barrier changes. Delayed stock actions then cannot race through the
++        // interval between a claim becoming unsafe and the display set write.
++        (after - before).forEach { display ->
++            shortcutClaimStates[display]?.claim?.let {
++                WonadInputBridge.onUiClaimContainmentChanged(it, true)
++            }
++        }
++        blankDisplays = nextBlank
++        protectedInputDisplays = nextProtected
++        // Opening is ordered after both volatile barriers. Old draining pairs
++        // remain draining; only future pairs for this exact claim may pass.
++        (before - after).forEach { display ->
++            shortcutClaimStates[display]?.claim?.let {
++                WonadInputBridge.onUiClaimContainmentChanged(it, false)
++            }
++        }
+     }
+ 
+     private fun beginDepartingInputBarrier(display: Int) {
+@@ -132,13 +151,14 @@
+     internal fun shortcutClaimCurrent(expected: ShortcutClaim): Boolean =
+         shortcutClaimStates[expected.display]?.claim === expected
+ 
+-    /** Publish removal before touching the old input owner. A new token is not
+-     * visible until exact old-owner cleanup has completed, so releaseDisplay
+-     * can never revoke a replacement shortcut slot with the same display id. */
++    /** Mark exact policy state retired before unpublishing the old input
++     * authority. A delayed stock action and this callback linearize on the
++     * Kotlin helper; a replacement token remains unpublished until cleanup. */
+     private fun retireShortcutClaim(claim: Claim) {
+         val previous = shortcutClaimStates[claim.dc.displayId]?.claim?.takeIf {
+             it.incarnation == claim.incarnation
+         } ?: return
++        WonadInputBridge.onUiClaimRetiring(previous)
+         shortcutClaimStates = shortcutClaimStates - claim.dc.displayId
+         WonadInputBridge.onUiClaimRetired(previous)
+     }
+@@ -159,6 +179,7 @@
+             return
+         }
+         if (previous != null) {
++            WonadInputBridge.onUiClaimRetiring(previous)
+             shortcutClaimStates = shortcutClaimStates - claim.dc.displayId
+             // If exact old-owner cleanup raises a fatal error, this method
+             // stops here and cannot publish replacement authority.
+@@ -168,6 +189,9 @@
+             claim.incarnation, owner)
+         shortcutClaimStates = shortcutClaimStates + (claim.dc.displayId to
+             ShortcutClaimState(token, claim.expires))
++        if (consumeInput(token.display)) {
++            WonadInputBridge.onUiClaimContainmentChanged(token, true)
++        }
+     }
+ 
+     @JvmStatic fun owns(dc: DisplayContent): Boolean = claims[dc.displayId]?.dc === dc
+--- /dev/null
++++ b/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyContainment.kt
+@@ -0,0 +1,888 @@
++package org.wonad.server.input
++
++import java.util.LinkedHashMap
++import java.util.IdentityHashMap
++
++/**
++ * Pure system_server state for preserving physical key-pair and native-claim
++ * ownership across focus/display migration.  Android objects are deliberately
++ * opaque: [ClaimLineage.claim] and [ClaimLineage.owner] are compared by object
++ * identity, never equals(), display number, or mutable focus.
++ *
++ * The AOSP adapter must construct [ClaimLineage] only from the exact
++ * WonadUiBridge.ShortcutClaim observed on the initial physical event.  It must
++ * classify that retained object with shortcutClaimCurrent(expected) and the
++ * existing fail-black checks.  This class never rewrites an event display.
++ */
++internal class WonadPolicyKeyContainment(private val maximumPairs: Int = 256) {
++    init { require(maximumPairs >= 8) }
++
++    internal enum class Action { DOWN, UP }
++    internal enum class Role { ORDINARY, APP_SWITCH, META, ALT, TAB, ESCAPE }
++    internal enum class ClaimStatus { HEALTHY, BLOCKED, RETIRED }
++    internal enum class RecentDispatchMode { START, COMPLETE, CANCEL }
++
++    /** Exact immutable projection plus the original claim and Binder objects. */
++    internal class ClaimLineage(
++        internal val claim: Any,
++        internal val display: Int,
++        internal val user: Int,
++        internal val generation: Long,
++        internal val incarnation: Long,
++        internal val owner: Any,
++    ) {
++        init {
++            require(display > 0)
++            require(user >= 0)
++            require(generation > 0)
++            require(incarnation > 0)
++        }
++
++        internal fun sameExact(other: ClaimLineage?): Boolean = other != null &&
++            claim === other.claim && owner === other.owner && display == other.display &&
++            user == other.user && generation == other.generation &&
++            incarnation == other.incarnation
++    }
++
++    internal data class PhysicalPair(
++        val device: Int,
++        val keyCode: Int,
++        val downTime: Long,
++    ) {
++        init { require(downTime >= 0) }
++    }
++
++    internal data class Event(
++        val physical: PhysicalPair,
++        val display: Int,
++        val action: Action,
++        val repeat: Int = 0,
++        val canceled: Boolean = false,
++    ) {
++        init { require(repeat >= 0) }
++        internal val firstDown: Boolean get() = action == Action.DOWN && repeat == 0
++        internal val terminal: Boolean get() = action == Action.UP || canceled
++    }
++
++    /** Identity object retained by stock-owner records; it has no value equality. */
++    internal class PairToken internal constructor(
++        internal val physical: PhysicalPair,
++        internal val role: Role,
++        internal val initialDisplay: Int,
++        internal val origin: ClaimLineage?,
++    )
++
++    internal class RecentOwner internal constructor(
++        internal val pair: PairToken,
++        internal val focus: Any?,
++    )
++    internal class MetaOwner internal constructor(
++        internal val pair: PairToken,
++        internal val focus: Any?,
++    )
++    internal class CapsOwner internal constructor(
++        internal val meta: PairToken,
++        internal val alt: PairToken,
++        internal val focus: Any?,
++    )
++    internal class AltTabOwner internal constructor(
++        internal val alt: PairToken,
++        internal val tab: PairToken,
++        internal val focus: Any?,
++    )
++    internal class EscapeOwner internal constructor(
++        internal val pair: PairToken,
++        internal val focus: Any?,
++        internal val completion: Any,
++    )
++    internal data class EscapeRegistration(
++        val owner: EscapeOwner,
++        val replaced: EscapeOwner?,
++        val install: Boolean,
++        val cleanup: Decision,
++        val rollback: Decision,
++    )
++
++    /** One atomic owner publication. [cleanup] contains only displaced exact
++     * owners which the Java callback must unwind before publishing [owner]. */
++    internal data class OwnerInstallation(
++        val owner: Any,
++        val cleanup: Decision,
++        val rollback: Decision,
++        val install: Boolean,
++    )
++
++    internal data class Decision(
++        val consume: Boolean,
++        val pair: PairToken?,
++        val clearMeta: MetaOwner?,
++        val clearCaps: CapsOwner?,
++        val finishAltTab: AltTabOwner?,
++        val cancelRecent: RecentOwner?,
++        val cancelEscapes: List<EscapeOwner>,
++        val saturated: Boolean,
++    )
++
++    internal data class PassiveDecision(
++        val clearMeta: MetaOwner?,
++        val clearCaps: CapsOwner?,
++    )
++
++    internal fun interface OriginResolver {
++        fun classify(origin: ClaimLineage): ClaimStatus
++    }
++
++    private data class Slot(val device: Int, val keyCode: Int)
++    private class Record(val token: PairToken, var draining: Boolean)
++    private class Effects {
++        var meta: MetaOwner? = null
++        var caps: CapsOwner? = null
++        var altTab: AltTabOwner? = null
++        var recent: RecentOwner? = null
++        val escapes = mutableListOf<EscapeOwner>()
++
++        fun decision(consume: Boolean, pair: PairToken?, saturated: Boolean) = Decision(
++            consume, pair, meta, caps, altTab, recent, escapes.toList(), saturated)
++    }
++
++    private fun emptyDecision(): Decision =
++        Effects().decision(consume = false, pair = null, saturated = saturated)
++
++    private fun rollbackDecision(owner: Any, replacedEscape: EscapeOwner? = null): Decision {
++        val effects = Effects()
++        when (owner) {
++            is MetaOwner -> effects.meta = owner
++            is CapsOwner -> effects.caps = owner
++            is AltTabOwner -> effects.altTab = owner
++            is RecentOwner -> effects.recent = owner
++            is EscapeOwner -> {
++                replacedEscape?.let { effects.escapes += it }
++                effects.escapes += owner
++            }
++            else -> error("Unknown owner type")
++        }
++        return effects.decision(consume = false, pair = null, saturated = saturated)
++    }
++
++    private inline fun preserveOriginalFailure(original: Throwable, rollback: () -> Unit): Nothing {
++        try {
++            rollback()
++        } catch (rollbackFailure: Throwable) {
++            if (rollbackFailure !== original) original.addSuppressed(rollbackFailure)
++        }
++        throw original
++    }
++
++    private val active = LinkedHashMap<Slot, Record>()
++    // Replaced/lost-UP owners are retained only to drain their exact late UP.
++    private val drains = LinkedHashMap<PhysicalPair, PairToken>()
++    private var saturated = false
++    private var metaOwner: MetaOwner? = null
++    private var capsOwner: CapsOwner? = null
++    private var altTabOwner: AltTabOwner? = null
++    private var recentOwner: RecentOwner? = null
++    private val escapeOwners = LinkedHashMap<Int, EscapeOwner>()
++    // Lifecycle callbacks and input events use the same exact claim object.
++    // IdentityHashMap is intentional: a replacement may reuse every scalar.
++    private val claimStatus = IdentityHashMap<Any, ClaimStatus>()
++    // Legacy pure-state test conveniences use the lifecycle map only. All
++    // production owner installation passes the live bridge resolver instead.
++    private val optimisticResolver = OriginResolver { origin ->
++        claimStatus[origin.claim] ?: ClaimStatus.HEALTHY
++    }
++    private var mutationEpoch = 1L
++
++    private fun mutated() {
++        mutationEpoch = Math.addExact(mutationEpoch, 1L)
++    }
++
++    private fun tracked(role: Role): Boolean = role != Role.ORDINARY
++
++    private fun statusBlocked(origin: ClaimLineage?, resolver: OriginResolver): Boolean =
++        origin != null && (claimStatus[origin.claim]?.let { it != ClaimStatus.HEALTHY }
++            ?: (resolver.classify(origin) != ClaimStatus.HEALTHY))
++
++    private fun sameOrigin(left: ClaimLineage?, right: ClaimLineage?): Boolean =
++        left != null && left.sameExact(right)
++
++    private fun sameAuthority(left: ClaimLineage?, right: ClaimLineage?): Boolean =
++        (left == null && right == null) || sameOrigin(left, right)
++
++    /** Phone/unclaimed stock state has priority over a claimed external state.
++     * A phone key may displace external state; one external claim may replace
++     * its own state; a foreign external claim may not steal either. */
++    private fun mayReplace(existing: List<PairToken>, incoming: List<PairToken>): Boolean {
++        val incomingOrigin = incoming.first().origin
++        require(incoming.all { sameAuthority(it.origin, incomingOrigin) })
++        if (incomingOrigin == null) return true
++        if (existing.any { it.origin == null }) return false
++        return existing.all { sameOrigin(it.origin, incomingOrigin) }
++    }
++
++    private fun addDrain(token: PairToken) {
++        if (drains.size >= maximumPairs && token.physical !in drains) {
++            // Never silently evict authority while a physical UP can still arrive.
++            // Saturation is released only by a trusted complete device/key census.
++            saturated = true
++            return
++        }
++        drains[token.physical] = token
++    }
++
++    private fun cleanupToken(token: PairToken, effects: Effects) {
++        metaOwner?.takeIf { it.pair === token }?.let {
++            metaOwner = null
++            effects.meta = it
++        }
++        capsOwner?.takeIf { it.meta === token || it.alt === token }?.let {
++            capsOwner = null
++            effects.caps = it
++        }
++        altTabOwner?.takeIf { it.alt === token || it.tab === token }?.let {
++            altTabOwner = null
++            effects.altTab = it
++        }
++        recentOwner?.takeIf { it.pair === token }?.let {
++            recentOwner = null
++            effects.recent = it
++        }
++        escapeOwners.entries.toList().forEach { (device, owner) ->
++            if (owner.pair === token) {
++                escapeOwners.remove(device)
++                effects.escapes += owner
++            }
++        }
++    }
++
++    /** Retiring one claim may close several stock states started by its keys. */
++    private fun cleanupOrigin(origin: ClaimLineage?, effects: Effects) {
++        if (origin == null) return
++        metaOwner?.takeIf { sameOrigin(it.pair.origin, origin) }?.let {
++            metaOwner = null
++            effects.meta = it
++        }
++        capsOwner?.takeIf {
++            sameOrigin(it.meta.origin, origin) || sameOrigin(it.alt.origin, origin)
++        }?.let {
++            capsOwner = null
++            effects.caps = it
++        }
++        altTabOwner?.takeIf {
++            sameOrigin(it.alt.origin, origin) || sameOrigin(it.tab.origin, origin)
++        }?.let {
++            altTabOwner = null
++            effects.altTab = it
++        }
++        recentOwner?.takeIf { sameOrigin(it.pair.origin, origin) }?.let {
++            recentOwner = null
++            effects.recent = it
++        }
++        escapeOwners.entries.toList().forEach { (device, owner) ->
++            if (sameOrigin(owner.pair.origin, origin)) {
++                escapeOwners.remove(device)
++                effects.escapes += owner
++            }
++        }
++    }
++
++    /** Match delayed/global stock owners even after their active pair record
++     * has already reached a terminal event. */
++    private fun cleanupClaim(claim: Any, effects: Effects) {
++        metaOwner?.takeIf { it.pair.origin?.claim === claim }?.let {
++            metaOwner = null
++            effects.meta = it
++        }
++        capsOwner?.takeIf {
++            it.meta.origin?.claim === claim || it.alt.origin?.claim === claim
++        }?.let {
++            capsOwner = null
++            effects.caps = it
++        }
++        altTabOwner?.takeIf {
++            it.alt.origin?.claim === claim || it.tab.origin?.claim === claim
++        }?.let {
++            altTabOwner = null
++            effects.altTab = it
++        }
++        recentOwner?.takeIf { it.pair.origin?.claim === claim }?.let {
++            recentOwner = null
++            effects.recent = it
++        }
++        escapeOwners.entries.toList().forEach { (device, owner) ->
++            if (owner.pair.origin?.claim === claim) {
++                escapeOwners.remove(device)
++                effects.escapes += owner
++            }
++        }
++    }
++
++    private fun retire(record: Record, effects: Effects, retainDrain: Boolean) {
++        cleanupToken(record.token, effects)
++        if (retainDrain) addDrain(record.token)
++    }
++
++    /**
++     * Preserve the two passive stock bookkeeping clears which originally ran
++     * before multi-key safety.  A blocked event can clear only the exact claim
++     * which owns the pending state; an allowed event keeps stock's global
++     * cancellation semantics.  No gesture/action is dispatched here.
++     */
++    @Synchronized
++    internal fun passiveBeforeSafety(
++        event: Event,
++        role: Role,
++        currentOrigin: ClaimLineage?,
++        currentDisplayBlocked: Boolean,
++        resolver: OriginResolver,
++    ): PassiveDecision {
++        // Count every physical observation, including safety gestures which
++        // return before the later generic guard. A device census captured
++        // before this point can therefore never clear newer pair state.
++        mutated()
++        val slot = Slot(event.physical.device, event.physical.keyCode)
++        val retained = if (event.firstDown) {
++            active[slot]?.takeIf { it.token.physical == event.physical }?.token
++        } else {
++            active[slot]?.takeIf { it.token.physical == event.physical }?.token
++                ?: drains[event.physical]
++        }
++        // A stale/migrated event is classified against the exact physical
++        // pair's retained claim, never a replacement claim currently attached
++        // to the numeric display.  A genuinely fresh DOWN has no retained pair
++        // and therefore uses the current display/claim observation.
++        val effectiveOrigin = retained?.origin ?: currentOrigin
++        val blocked = saturated || if (retained != null) {
++            statusBlocked(retained.origin, resolver)
++        } else {
++            currentDisplayBlocked || statusBlocked(currentOrigin, resolver)
++        }
++        var clearMeta: MetaOwner? = null
++        var clearCaps: CapsOwner? = null
++        metaOwner?.takeIf {
++            role != Role.META && ((!blocked && effectiveOrigin == null) ||
++                sameOrigin(it.pair.origin, effectiveOrigin))
++        }?.let {
++            metaOwner = null
++            clearMeta = it
++        }
++        capsOwner?.takeIf {
++            role != Role.META && role != Role.ALT &&
++                ((!blocked && effectiveOrigin == null) ||
++                sameOrigin(it.meta.origin, effectiveOrigin) ||
++                sameOrigin(it.alt.origin, effectiveOrigin))
++        }?.let {
++            capsOwner = null
++            clearCaps = it
++        }
++        return PassiveDecision(clearMeta, clearCaps)
++    }
++
++    /**
++     * Observe exactly one physical event.  The caller may perform platform
++     * multi-key safety handling before acting on [Decision.consume]; passive
++     * owner clears are already exact and do not grant/dispatch an action.
++     */
++    @Synchronized
++    internal fun beforeStock(
++        event: Event,
++        role: Role,
++        currentOrigin: ClaimLineage?,
++        currentDisplayBlocked: Boolean,
++        resolver: OriginResolver,
++    ): Decision {
++        mutated()
++        val effects = Effects()
++        val slot = Slot(event.physical.device, event.physical.keyCode)
++
++        // A late UP for a replaced owner is consumed without touching the
++        // replacement stored in the same device/key slot.
++        if (!event.firstDown && event.physical in drains) {
++            val token = drains.getValue(event.physical)
++            if (event.terminal) drains.remove(event.physical)
++            return effects.decision(consume = true, pair = token, saturated = saturated)
++        }
++
++        var record = active[slot]
++        if (event.firstDown && record != null &&
++            record.token.physical.downTime != event.physical.downTime) {
++            active.remove(slot)
++            retire(record, effects, retainDrain = true)
++            record = null
++        }
++
++        if (event.firstDown && record != null) {
++            val blocked = saturated || record.draining || currentDisplayBlocked ||
++                statusBlocked(record.token.origin, resolver)
++            if (blocked && !record.draining) {
++                record.draining = true
++                cleanupToken(record.token, effects)
++                cleanupOrigin(record.token.origin, effects)
++            }
++            return effects.decision(blocked, record.token, saturated)
++        }
++
++        if (event.firstDown) {
++            val originBlocked = statusBlocked(currentOrigin, resolver)
++            val blocked = saturated || currentDisplayBlocked || originBlocked
++            val token = PairToken(event.physical, role, event.display, currentOrigin)
++            // Every claim-owned DOWN is retained, including ordinary keys, so
++            // retirement between DOWN and a phone-stamped UP cannot lose pair
++            // parity.  Truly unclaimed ordinary phone keys remain untracked.
++            if (blocked || tracked(role) || currentOrigin != null) {
++                if (active.size >= maximumPairs && slot !in active) {
++                    saturated = true
++                } else {
++                    active[slot] = Record(token, draining = blocked)
++                }
++            }
++            // Preserve stock's ordinary-key cancellation only for an allowed
++            // event.  A blocked event may clear only state from its exact claim.
++            if (blocked) cleanupOrigin(currentOrigin, effects)
++            else {
++                if (role != Role.META) metaOwner?.takeIf {
++                    currentOrigin == null || sameOrigin(it.pair.origin, currentOrigin)
++                }?.let {
++                    metaOwner = null
++                    effects.meta = it
++                }
++                if (role != Role.META && role != Role.ALT) capsOwner?.takeIf {
++                    currentOrigin == null || sameOrigin(it.meta.origin, currentOrigin) ||
++                        sameOrigin(it.alt.origin, currentOrigin)
++                }?.let {
++                    capsOwner = null
++                    effects.caps = it
++                }
++            }
++            return effects.decision(blocked || saturated, token, saturated)
++        }
++
++        record = active[slot]?.takeIf { it.token.physical == event.physical }
++        if (record == null) {
++            val blocked = saturated || currentDisplayBlocked ||
++                statusBlocked(currentOrigin, resolver)
++            if (blocked) cleanupOrigin(currentOrigin, effects)
++            return effects.decision(blocked, null, saturated)
++        }
++
++        val originBlocked = statusBlocked(record.token.origin, resolver)
++        val blocked = saturated || record.draining || currentDisplayBlocked || originBlocked
++        if (blocked && !record.draining) {
++            record.draining = true
++            cleanupToken(record.token, effects)
++            cleanupOrigin(record.token.origin, effects)
++        }
++        if (event.terminal) {
++            active.remove(slot)
++            if (blocked) cleanupToken(record.token, effects)
++        }
++        return effects.decision(blocked, record.token, saturated)
++    }
++
++    @Synchronized
++    internal fun activePair(device: Int, role: Role): PairToken? =
++        active.values.lastOrNull { it.token.physical.device == device &&
++            it.token.role == role && !it.draining }?.token
++
++    private fun pairUsable(pair: PairToken, resolver: OriginResolver): Boolean {
++        val record = active[Slot(pair.physical.device, pair.physical.keyCode)]
++        return record?.token === pair && !record.draining &&
++            !statusBlocked(pair.origin, resolver)
++    }
++
++    /** Install the helper owner and its external mirror/action within the same
++     * monitor used by lifecycle retirement. */
++    @Synchronized
++    internal fun installMetaPending(pair: PairToken, focus: Any?, resolver: OriginResolver,
++        rollback: (OwnerInstallation) -> Unit = {},
++        install: (OwnerInstallation) -> Unit): OwnerInstallation? {
++        mutated()
++        require(pair.role == Role.META)
++        if (!pairUsable(pair, resolver)) return null
++        metaOwner?.takeIf { it.pair === pair }?.let {
++            return OwnerInstallation(it, emptyDecision(), emptyDecision(), false)
++        }
++        val existing = buildList {
++            metaOwner?.let { add(it.pair) }
++            capsOwner?.let { add(it.meta); add(it.alt) }
++        }
++        if (existing.isNotEmpty() && !mayReplace(existing, listOf(pair))) return null
++        val effects = Effects()
++        metaOwner?.let { effects.meta = it; metaOwner = null }
++        capsOwner?.let { effects.caps = it; capsOwner = null }
++        val owner = MetaOwner(pair, focus)
++        metaOwner = owner
++        val registration = OwnerInstallation(
++            owner, effects.decision(false, null, saturated), rollbackDecision(owner), true)
++        try { install(registration) }
++        catch (error: Throwable) {
++            if (metaOwner === owner) metaOwner = null
++            preserveOriginalFailure(error) { rollback(registration) }
++        }
++        return registration
++    }
++
++    internal fun markMetaPending(pair: PairToken, focus: Any?): MetaOwner =
++        checkNotNull(installMetaPending(pair, focus, optimisticResolver) {}).owner as MetaOwner
++
++    @Synchronized
++    internal fun installCapsPending(meta: PairToken, alt: PairToken, focus: Any?,
++        resolver: OriginResolver,
++        rollback: (OwnerInstallation) -> Unit = {},
++        install: (OwnerInstallation) -> Unit): OwnerInstallation? {
++        mutated()
++        require(meta.role == Role.META && alt.role == Role.ALT)
++        require(meta.physical.device == alt.physical.device)
++        require(sameAuthority(meta.origin, alt.origin))
++        if (!pairUsable(meta, resolver) || !pairUsable(alt, resolver)) return null
++        capsOwner?.takeIf { it.meta === meta && it.alt === alt }?.let {
++            return OwnerInstallation(it, emptyDecision(), emptyDecision(), false)
++        }
++        val existing = buildList {
++            metaOwner?.let { add(it.pair) }
++            capsOwner?.let { add(it.meta); add(it.alt) }
++        }
++        if (existing.isNotEmpty() && !mayReplace(existing, listOf(meta, alt))) return null
++        val effects = Effects()
++        metaOwner?.let { effects.meta = it; metaOwner = null }
++        capsOwner?.let { effects.caps = it; capsOwner = null }
++        val owner = CapsOwner(meta, alt, focus)
++        capsOwner = owner
++        val registration = OwnerInstallation(
++            owner, effects.decision(false, null, saturated), rollbackDecision(owner), true)
++        try { install(registration) }
++        catch (error: Throwable) {
++            if (capsOwner === owner) capsOwner = null
++            preserveOriginalFailure(error) { rollback(registration) }
++        }
++        return registration
++    }
++
++    internal fun markCapsPending(meta: PairToken, alt: PairToken, focus: Any?): CapsOwner =
++        checkNotNull(installCapsPending(meta, alt, focus, optimisticResolver) {}).owner as CapsOwner
++
++    /** Stock clears a pending Caps chord on an allowed Alt down without Meta. */
++    @Synchronized
++    internal fun clearCapsForAllowedStock(): CapsOwner? {
++        mutated()
++        return capsOwner.also {
++        capsOwner = null
++        }
++    }
++
++    /** Stock Alt-without-Meta cancellation, scoped so a claimed external key
++     * cannot erase a pending phone or foreign-claim Caps chord. */
++    @Synchronized
++    internal fun clearCapsForAllowedPair(pair: PairToken,
++        resolver: OriginResolver): CapsOwner? {
++        mutated()
++        if (!pairUsable(pair, resolver)) return null
++        return capsOwner?.takeIf {
++            mayReplace(listOf(it.meta, it.alt), listOf(pair))
++        }?.also { capsOwner = null }
++    }
++
++    @Synchronized
++    internal fun clearMetaForAllowedStock(): MetaOwner? {
++        mutated()
++        return metaOwner.also {
++        metaOwner = null
++        }
++    }
++
++    @Synchronized
++    internal fun installAltTabStarted(tab: PairToken, focus: Any?, resolver: OriginResolver,
++        rollback: (OwnerInstallation) -> Unit = {},
++        install: (OwnerInstallation) -> Unit): OwnerInstallation? {
++        mutated()
++        require(tab.role == Role.TAB)
++        if (!pairUsable(tab, resolver)) return null
++        val alt = active.values.lastOrNull { it.token.physical.device == tab.physical.device &&
++            it.token.role == Role.ALT && !it.draining &&
++            !statusBlocked(it.token.origin, resolver) }?.token ?: return null
++        require(sameAuthority(alt.origin, tab.origin))
++        altTabOwner?.takeIf { it.alt === alt && it.tab === tab }?.let {
++            return OwnerInstallation(it, emptyDecision(), emptyDecision(), false)
++        }
++        val existing = altTabOwner?.let { listOf(it.alt, it.tab) }.orEmpty()
++        if (existing.isNotEmpty() && !mayReplace(existing, listOf(alt, tab))) return null
++        val effects = Effects()
++        altTabOwner?.let { effects.altTab = it; altTabOwner = null }
++        val owner = AltTabOwner(alt, tab, focus)
++        altTabOwner = owner
++        val registration = OwnerInstallation(
++            owner, effects.decision(false, null, saturated), rollbackDecision(owner), true)
++        try { install(registration) }
++        catch (error: Throwable) {
++            if (altTabOwner === owner) altTabOwner = null
++            preserveOriginalFailure(error) { rollback(registration) }
++        }
++        return registration
++    }
++
++    internal fun markAltTabStarted(tab: PairToken, focus: Any?): AltTabOwner? =
++        installAltTabStarted(tab, focus, optimisticResolver) {}?.owner as? AltTabOwner
++
++    @Synchronized
++    internal fun installRecentStarted(pair: PairToken, focus: Any?, resolver: OriginResolver,
++        rollback: (OwnerInstallation) -> Unit = {},
++        install: (OwnerInstallation) -> Unit): OwnerInstallation? {
++        mutated()
++        require(pair.role == Role.APP_SWITCH)
++        if (!pairUsable(pair, resolver)) return null
++        recentOwner?.takeIf { it.pair === pair }?.let {
++            return OwnerInstallation(it, emptyDecision(), emptyDecision(), false)
++        }
++        val existing = recentOwner?.let { listOf(it.pair) }.orEmpty()
++        if (existing.isNotEmpty() && !mayReplace(existing, listOf(pair))) return null
++        val effects = Effects()
++        recentOwner?.let { effects.recent = it; recentOwner = null }
++        val owner = RecentOwner(pair, focus)
++        recentOwner = owner
++        val registration = OwnerInstallation(
++            owner, effects.decision(false, null, saturated), rollbackDecision(owner), true)
++        try { install(registration) }
++        catch (error: Throwable) {
++            if (recentOwner === owner) recentOwner = null
++            preserveOriginalFailure(error) { rollback(registration) }
++        }
++        return registration
++    }
++
++    internal fun markRecentStarted(pair: PairToken, focus: Any?): RecentOwner =
++        checkNotNull(installRecentStarted(pair, focus, optimisticResolver) {}).owner as RecentOwner
++
++    @Synchronized
++    internal fun installEscapePending(pair: PairToken, focus: Any?, completion: Any,
++        resolver: OriginResolver,
++        rollback: (EscapeRegistration) -> Unit = {},
++        install: (EscapeRegistration) -> Unit): EscapeRegistration? {
++        mutated()
++        require(pair.role == Role.ESCAPE)
++        if (!pairUsable(pair, resolver)) return null
++        escapeOwners[pair.physical.device]?.takeIf { it.pair === pair }?.let {
++            return EscapeRegistration(it, replaced = null, install = false,
++                cleanup = emptyDecision(), rollback = emptyDecision())
++        }
++        escapeOwners[pair.physical.device]?.let {
++            if (!mayReplace(listOf(it.pair), listOf(pair))) return null
++        }
++        val owner = EscapeOwner(pair, focus, completion)
++        val replaced = escapeOwners.put(pair.physical.device, owner)
++        val cleanupEffects = Effects()
++        replaced?.let { cleanupEffects.escapes += it }
++        val registration = EscapeRegistration(owner, replaced, install = true,
++            cleanup = cleanupEffects.decision(false, null, saturated),
++            rollback = rollbackDecision(owner))
++        try { install(registration) }
++        catch (error: Throwable) {
++            if (escapeOwners[pair.physical.device] === owner) {
++                escapeOwners.remove(pair.physical.device)
++            }
++            preserveOriginalFailure(error) { rollback(registration) }
++        }
++        return registration
++    }
++
++    internal fun markEscapePending(pair: PairToken, focus: Any?, completion: Any):
++        EscapeRegistration = checkNotNull(installEscapePending(
++            pair, focus, completion, optimisticResolver) {})
++
++    @Synchronized
++    internal fun completeMeta(pair: PairToken): MetaOwner? {
++        mutated()
++        return metaOwner?.takeIf { it.pair === pair }?.also { metaOwner = null }
++    }
++
++    @Synchronized
++    internal fun completeCaps(pair: PairToken): CapsOwner? {
++        mutated()
++        return capsOwner?.takeIf { it.meta === pair || it.alt === pair }?.also {
++            capsOwner = null
++        }
++    }
++
++    @Synchronized
++    internal fun completeAltTab(pair: PairToken): AltTabOwner? {
++        mutated()
++        return altTabOwner?.takeIf { it.alt === pair || it.tab === pair }?.also {
++            altTabOwner = null
++        }
++    }
++
++    @Synchronized
++    internal fun completeRecent(pair: PairToken): RecentOwner? {
++        mutated()
++        return recentOwner?.takeIf { it.pair === pair }?.also { recentOwner = null }
++    }
++
++    @Synchronized
++    internal fun completeEscape(pair: PairToken, completion: Any): EscapeOwner? {
++        mutated()
++        return escapeOwners[pair.physical.device]?.takeIf {
++            it.pair === pair && it.completion === completion
++        }?.also { escapeOwners.remove(pair.physical.device) }
++    }
++
++    @Synchronized
++    internal fun completeEscape(pair: PairToken): EscapeOwner? {
++        mutated()
++        return escapeOwners[pair.physical.device]?.takeIf { it.pair === pair }?.also {
++            escapeOwners.remove(pair.physical.device)
++        }
++    }
++
++    @Synchronized
++    internal fun completeEscape(completion: Any): EscapeOwner? {
++        mutated()
++        return escapeOwners.entries.firstOrNull { it.value.completion === completion }?.let {
++            escapeOwners.remove(it.key)
++            it.value
++        }
++    }
++
++    /**
++     * Atomically claim a delayed Escape completion and execute its stock
++     * action. Exact claim containment/retirement uses this same monitor. If
++     * retirement wins, no action runs; if completion wins, it was already an
++     * in-flight action and finishes before retirement acquires this monitor.
++     */
++    @Synchronized
++    internal fun dispatchEscape(completion: Any, resolver: OriginResolver,
++        action: (EscapeOwner) -> Unit): Boolean {
++        mutated()
++        val entry = escapeOwners.entries.firstOrNull {
++            it.value.completion === completion
++        } ?: return false
++        val owner = entry.value
++        if (statusBlocked(owner.pair.origin, resolver)) {
++            escapeOwners.remove(entry.key)
++            return false
++        }
++        escapeOwners.remove(entry.key)
++        action(owner)
++        return true
++    }
++
++    /**
++     * Publish a lifecycle transition for one exact ShortcutClaim. BLOCKED and
++     * RETIRED immediately convert all of that claim's live pairs to drainage
++     * and return only that claim's stock-owner cleanup. Passing null removes a
++     * temporary barrier for future pairs; existing draining pairs stay closed.
++     */
++    @Synchronized
++    internal fun updateClaimStatus(claim: Any, status: ClaimStatus?): Decision {
++        mutated()
++        if (status == null || status == ClaimStatus.HEALTHY) claimStatus.remove(claim)
++        else claimStatus[claim] = status
++        val effects = Effects()
++        if (status == ClaimStatus.BLOCKED || status == ClaimStatus.RETIRED) {
++            active.values.filter { it.token.origin?.claim === claim }.forEach { record ->
++                record.draining = true
++                cleanupToken(record.token, effects)
++            }
++            cleanupClaim(claim, effects)
++        }
++        return effects.decision(consume = false, pair = null, saturated = saturated)
++    }
++
++    @Synchronized
++    internal fun claimBlocked(claim: Any): Boolean = claimStatus[claim]?.let {
++        it != ClaimStatus.HEALTHY
++    } == true
++
++    /** Removal is visible through the resolver, so the temporary identity map
++     * entry can be forgotten after UiBridge has unpublished the exact claim. */
++    @Synchronized
++    internal fun forgetClaim(claim: Any) {
++        mutated()
++        claimStatus.remove(claim)
++    }
++
++    @Synchronized
++    internal fun mutationEpoch(): Long = mutationEpoch
++
++    /**
++     * Remove exact state for physically absent devices.  [allKeysReleased]
++     * must come from a trusted complete InputManager device/key census; only
++     * that proof can clear saturation after an overflow.
++     */
++    @Synchronized
++    internal fun reconcileDevices(presentDevices: Set<Int>, allKeysReleased: Boolean,
++        expectedEpoch: Long): Decision {
++        val effects = Effects()
++        if (mutationEpoch != expectedEpoch) {
++            return effects.decision(consume = false, pair = null, saturated = saturated)
++        }
++        mutated()
++        active.entries.toList().forEach { (slot, record) ->
++            if (slot.device !in presentDevices) {
++                active.remove(slot)
++                retire(record, effects, retainDrain = false)
++            }
++        }
++        drains.keys.removeAll { it.device !in presentDevices }
++        if (allKeysReleased) {
++            // The caller proved, through the native reader, that no physical
++            // key code on any device is down. Therefore every remaining
++            // present-device record is a lost-UP record and can be retired
++            // with its exact stock-owner cleanup; no synthetic UP is made.
++            active.values.toList().forEach { retire(it, effects, retainDrain = false) }
++            active.clear()
++            drains.clear()
++            saturated = false
++        }
++        return effects.decision(consume = false, pair = null, saturated = saturated)
++    }
++
++    @Synchronized
++    internal fun removeDevice(device: Int): Decision {
++        mutated()
++        val effects = Effects()
++        active.entries.toList().forEach { (slot, record) ->
++            if (slot.device == device) {
++                active.remove(slot)
++                retire(record, effects, retainDrain = false)
++            }
++        }
++        drains.keys.removeAll { it.device == device }
++        return effects.decision(consume = false, pair = null, saturated = saturated)
++    }
++
++    @Synchronized
++    internal fun stateSize(): Int = active.size + drains.size
++
++    /** Exact in-process handoff to PWM around synchronous gesture dispatch. */
++    internal class RecentDispatch internal constructor(
++        internal val owner: RecentOwner,
++        internal val mode: RecentDispatchMode,
++    )
++
++    internal companion object {
++        private val dispatches = ThreadLocal<ArrayDeque<RecentDispatch>>()
++
++        @JvmStatic
++        internal fun beginRecentDispatch(
++            owner: RecentOwner,
++            mode: RecentDispatchMode,
++        ): RecentDispatch {
++            val value = RecentDispatch(owner, mode)
++            val stack = dispatches.get() ?: ArrayDeque<RecentDispatch>().also {
++                dispatches.set(it)
++            }
++            stack.addLast(value)
++            return value
++        }
++
++        @JvmStatic
++        internal fun currentRecentDispatch(mode: RecentDispatchMode): RecentOwner? =
++            dispatches.get()?.lastOrNull()?.takeIf { it.mode == mode }?.owner
++
++        @JvmStatic
++        internal fun endRecentDispatch(expected: RecentDispatch) {
++            val stack = checkNotNull(dispatches.get())
++            check(stack.lastOrNull() === expected)
++            stack.removeLast()
++            if (stack.isEmpty()) dispatches.remove()
++        }
++    }
++}
+--- /dev/null
++++ b/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyAdapter.kt
+@@ -0,0 +1,344 @@
++package org.wonad.server.input
++
++import android.content.Context
++import android.view.KeyEvent
++import com.android.server.wm.WindowManagerInternal
++import com.android.server.wm.WonadUiBridge
++
++/**
++ * Private Java-facing adapter for KeyGestureController/PhoneWindowManager.
++ * This is system_server implementation detail, not an SDK or Binder API.
++ */
++object WonadPolicyKeyAdapter {
++    const val ROLE_ORDINARY = 0
++    const val ROLE_APP_SWITCH = 1
++    const val ROLE_META = 2
++    const val ROLE_ALT = 3
++    const val ROLE_TAB = 4
++    const val ROLE_ESCAPE = 5
++
++    const val DISPATCH_START = 0
++    const val DISPATCH_COMPLETE = 1
++    const val DISPATCH_CANCEL = 2
++
++    class Passive internal constructor(internal val raw:
++        WonadPolicyKeyContainment.PassiveDecision) {
++        @JvmField val clearMeta: Any? = raw.clearMeta
++        @JvmField val clearCaps: Any? = raw.clearCaps
++    }
++
++    class Decision internal constructor(
++        internal val raw: WonadPolicyKeyContainment.Decision,
++        private val physical: WonadPolicyKeyContainment.PhysicalPair,
++    ) {
++        @JvmField val consume: Boolean = raw.consume
++        @JvmField val pair: Any? = raw.pair
++        @JvmField val clearMeta: Any? = raw.clearMeta
++        @JvmField val clearCaps: Any? = raw.clearCaps
++        @JvmField val finishAltTab: Any? = raw.finishAltTab
++        @JvmField val cancelRecent: Any? = raw.cancelRecent
++        @JvmField val cancelEscapes: Array<Any> = raw.cancelEscapes.toTypedArray()
++        @JvmField val saturated: Boolean = raw.saturated
++
++        internal fun matches(event: KeyEvent): Boolean =
++            physical.device == event.deviceId && physical.keyCode == event.keyCode &&
++                physical.downTime == event.downTime
++    }
++
++    class OwnerEvent internal constructor(pair: WonadPolicyKeyContainment.PairToken,
++        @JvmField val focus: Any?, @JvmField val completion: Any?) {
++        @JvmField val device: Int = pair.physical.device
++        @JvmField val keyCode: Int = pair.physical.keyCode
++        @JvmField val downTime: Long = pair.physical.downTime
++        @JvmField val display: Int = pair.initialDisplay
++    }
++
++    class EscapeInstall internal constructor(
++        registration: WonadPolicyKeyContainment.EscapeRegistration,
++    ) {
++        @JvmField val owner: Any = registration.owner
++        @JvmField val replaced: Any? = registration.replaced
++        @JvmField val install: Boolean = registration.install
++        @JvmField val cleanup: Decision = Decision(registration.cleanup,
++            WonadPolicyKeyContainment.PhysicalPair(-1, -1, 0))
++        @JvmField val rollback: Decision = Decision(registration.rollback,
++            WonadPolicyKeyContainment.PhysicalPair(-1, -1, 0))
++    }
++
++    class OwnerInstall internal constructor(
++        registration: WonadPolicyKeyContainment.OwnerInstallation,
++    ) {
++        @JvmField val owner: Any = registration.owner
++        @JvmField val cleanup: Decision = Decision(registration.cleanup,
++            WonadPolicyKeyContainment.PhysicalPair(-1, -1, 0))
++        @JvmField val rollback: Decision = Decision(registration.rollback,
++            WonadPolicyKeyContainment.PhysicalPair(-1, -1, 0))
++        @JvmField val clearMeta: Any? = registration.cleanup.clearMeta
++        @JvmField val clearCaps: Any? = registration.cleanup.clearCaps
++        @JvmField val finishAltTab: Any? = registration.cleanup.finishAltTab
++        @JvmField val cancelRecent: Any? = registration.cleanup.cancelRecent
++        @JvmField val install: Boolean = registration.install
++    }
++
++    fun interface CleanupListener {
++        fun onCleanup(decision: Decision)
++    }
++
++    fun interface EscapeAction {
++        fun run(owner: OwnerEvent)
++    }
++
++    /** Runs while exact helper ownership and claim retirement share one
++     * monitor. Implementations publish the Java mirror and synchronous stock
++     * START action before lifecycle cleanup can observe the owner. */
++    fun interface OwnerInstallAction {
++        fun run(install: OwnerInstall)
++    }
++
++    fun interface EscapeInstallAction {
++        fun run(install: EscapeInstall)
++    }
++
++    private val state = WonadPolicyKeyContainment()
++    @Volatile private var cleanupListener: CleanupListener? = null
++
++    private fun role(value: Int) = when (value) {
++        ROLE_ORDINARY -> WonadPolicyKeyContainment.Role.ORDINARY
++        ROLE_APP_SWITCH -> WonadPolicyKeyContainment.Role.APP_SWITCH
++        ROLE_META -> WonadPolicyKeyContainment.Role.META
++        ROLE_ALT -> WonadPolicyKeyContainment.Role.ALT
++        ROLE_TAB -> WonadPolicyKeyContainment.Role.TAB
++        ROLE_ESCAPE -> WonadPolicyKeyContainment.Role.ESCAPE
++        else -> throw IllegalArgumentException("Unknown policy role $value")
++    }
++
++    private fun dispatchMode(value: Int) = when (value) {
++        DISPATCH_START -> WonadPolicyKeyContainment.RecentDispatchMode.START
++        DISPATCH_COMPLETE -> WonadPolicyKeyContainment.RecentDispatchMode.COMPLETE
++        DISPATCH_CANCEL -> WonadPolicyKeyContainment.RecentDispatchMode.CANCEL
++        else -> throw IllegalArgumentException("Unknown dispatch mode $value")
++    }
++
++    /** Capture the actual immutable claim object and attachment incarnation. */
++    private fun origin(display: Int): WonadPolicyKeyContainment.ClaimLineage? =
++        WonadUiBridge.currentShortcutClaimState(display)?.claim?.let { claim ->
++            origin(claim)
++        }
++
++    private fun origin(claim: WonadUiBridge.ShortcutClaim) =
++        WonadPolicyKeyContainment.ClaimLineage(claim, claim.display, claim.user,
++            claim.generation, claim.incarnation, claim.owner)
++
++    private fun resolver(context: Context, wm: WindowManagerInternal) =
++        WonadPolicyKeyContainment.OriginResolver { retained ->
++            val claim = retained.claim as? WonadUiBridge.ShortcutClaim
++                ?: return@OriginResolver WonadPolicyKeyContainment.ClaimStatus.RETIRED
++            if (!WonadUiBridge.shortcutClaimCurrent(claim)) {
++                WonadPolicyKeyContainment.ClaimStatus.RETIRED
++            } else if (WonadInputBridge.policyClaimBlocked(
++                    context, wm, retained.display)) {
++                WonadPolicyKeyContainment.ClaimStatus.BLOCKED
++            } else {
++                WonadPolicyKeyContainment.ClaimStatus.HEALTHY
++            }
++        }
++
++    private fun event(value: KeyEvent) = WonadPolicyKeyContainment.Event(
++        WonadPolicyKeyContainment.PhysicalPair(
++            value.deviceId, value.keyCode, value.downTime),
++        value.displayId,
++        if (value.action == KeyEvent.ACTION_DOWN) WonadPolicyKeyContainment.Action.DOWN
++        else WonadPolicyKeyContainment.Action.UP,
++        value.repeatCount,
++        value.isCanceled)
++
++    /** Passive exact-owner bookkeeping; safe to invoke before platform safety. */
++    @JvmStatic fun passiveBeforeSafety(context: Context, wm: WindowManagerInternal,
++        value: KeyEvent, role: Int): Passive {
++        val current = origin(value.displayId)
++        return Passive(state.passiveBeforeSafety(event(value), role(role), current,
++            WonadInputBridge.policyClaimBlocked(context, wm, value.displayId),
++            resolver(context, wm)))
++    }
++
++    /** Final guard after safety/SecurePaste policy/fixed Wonad command priority. */
++    @JvmStatic fun beforeStock(context: Context, wm: WindowManagerInternal,
++        value: KeyEvent, role: Int): Decision {
++        val current = origin(value.displayId)
++        val observed = event(value)
++        return Decision(state.beforeStock(observed, role(role), current,
++            WonadInputBridge.policyClaimBlocked(context, wm, value.displayId),
++            resolver(context, wm)), observed.physical)
++    }
++
++    /** Consume/drain the original event only.  The display id is never replaced. */
++    @JvmStatic fun consume(wm: WindowManagerInternal, value: KeyEvent,
++        policyFlags: Int, decision: Decision): Boolean {
++        if (!decision.consume) return false
++        if (decision.matches(value)) {
++            WonadInputBridge.policyDrainContained(wm, value, policyFlags,
++                decision.raw.pair?.origin?.claim as? WonadUiBridge.ShortcutClaim)
++        }
++        // A mismatched Java decision remains fail-closed but cannot manufacture
++        // authority or feed a different event to native state.
++        return true
++    }
++
++    @JvmStatic fun activePair(device: Int, role: Int): Any? =
++        state.activePair(device, role(role))
++    @JvmStatic fun markMeta(pair: Any, focus: Any?): Any =
++        state.markMetaPending(pair as WonadPolicyKeyContainment.PairToken, focus)
++    @JvmStatic fun markCaps(meta: Any, alt: Any, focus: Any?): Any = state.markCapsPending(
++        meta as WonadPolicyKeyContainment.PairToken,
++        alt as WonadPolicyKeyContainment.PairToken, focus)
++    @JvmStatic fun clearCapsForAllowedStock(): Any? = state.clearCapsForAllowedStock()
++    @JvmStatic fun clearCapsForAllowedPair(context: Context, wm: WindowManagerInternal,
++        pair: Any): Any? = state.clearCapsForAllowedPair(
++            pair as WonadPolicyKeyContainment.PairToken, resolver(context, wm))
++    @JvmStatic fun clearMetaForAllowedStock(): Any? = state.clearMetaForAllowedStock()
++    @JvmStatic fun markAltTab(pair: Any, focus: Any?): Any? =
++        state.markAltTabStarted(pair as WonadPolicyKeyContainment.PairToken, focus)
++    @JvmStatic fun markRecent(pair: Any, focus: Any?): Any =
++        state.markRecentStarted(pair as WonadPolicyKeyContainment.PairToken, focus)
++    @JvmStatic fun markEscape(pair: Any, focus: Any?, completion: Any): EscapeInstall =
++        EscapeInstall(state.markEscapePending(
++            pair as WonadPolicyKeyContainment.PairToken, focus, completion))
++
++    /** Production owner installation revalidates the retained pair and exact
++     * live claim, then publishes its mirror/action in the lifecycle ordering
++     * domain. A false result means retirement won and the Java caller must
++     * consume without invoking stock behavior. */
++    @JvmStatic fun installMeta(context: Context, wm: WindowManagerInternal,
++        pair: Any, focus: Any?, action: OwnerInstallAction,
++        rollback: OwnerInstallAction): Boolean =
++        state.installMetaPending(pair as WonadPolicyKeyContainment.PairToken, focus,
++            resolver(context, wm), rollback = { rollback.run(OwnerInstall(it)) }) {
++                action.run(OwnerInstall(it))
++            } != null
++
++    @JvmStatic fun installCaps(context: Context, wm: WindowManagerInternal,
++        meta: Any, alt: Any, focus: Any?, action: OwnerInstallAction,
++        rollback: OwnerInstallAction): Boolean =
++        state.installCapsPending(meta as WonadPolicyKeyContainment.PairToken,
++            alt as WonadPolicyKeyContainment.PairToken, focus, resolver(context, wm),
++            rollback = { rollback.run(OwnerInstall(it)) }) {
++                action.run(OwnerInstall(it))
++            } != null
++
++    @JvmStatic fun installAltTab(context: Context, wm: WindowManagerInternal,
++        tab: Any, focus: Any?, action: OwnerInstallAction,
++        rollback: OwnerInstallAction): Boolean =
++        state.installAltTabStarted(tab as WonadPolicyKeyContainment.PairToken, focus,
++            resolver(context, wm), rollback = { rollback.run(OwnerInstall(it)) }) {
++                action.run(OwnerInstall(it))
++            } != null
++
++    @JvmStatic fun installRecent(context: Context, wm: WindowManagerInternal,
++        pair: Any, focus: Any?, action: OwnerInstallAction,
++        rollback: OwnerInstallAction): Boolean =
++        state.installRecentStarted(pair as WonadPolicyKeyContainment.PairToken, focus,
++            resolver(context, wm), rollback = { rollback.run(OwnerInstall(it)) }) {
++                action.run(OwnerInstall(it))
++            } != null
++
++    @JvmStatic fun installEscape(context: Context, wm: WindowManagerInternal,
++        pair: Any, focus: Any?, completion: Any, action: EscapeInstallAction,
++        rollback: EscapeInstallAction): Boolean =
++        state.installEscapePending(pair as WonadPolicyKeyContainment.PairToken,
++            focus, completion, resolver(context, wm),
++            rollback = { rollback.run(EscapeInstall(it)) }) { registration ->
++                action.run(EscapeInstall(registration))
++            } != null
++
++    @JvmStatic fun completeMeta(pair: Any): Any? =
++        state.completeMeta(pair as WonadPolicyKeyContainment.PairToken)
++    @JvmStatic fun completeCaps(pair: Any): Any? =
++        state.completeCaps(pair as WonadPolicyKeyContainment.PairToken)
++    @JvmStatic fun completeAltTab(pair: Any): Any? =
++        state.completeAltTab(pair as WonadPolicyKeyContainment.PairToken)
++    @JvmStatic fun completeRecent(pair: Any): Any? =
++        state.completeRecent(pair as WonadPolicyKeyContainment.PairToken)
++    @JvmStatic fun completeEscape(pair: Any, completion: Any): Any? =
++        state.completeEscape(pair as WonadPolicyKeyContainment.PairToken, completion)
++    @JvmStatic fun completeEscapePair(pair: Any): Any? =
++        state.completeEscape(pair as WonadPolicyKeyContainment.PairToken)
++    @JvmStatic fun completeEscape(completion: Any): Any? =
++        state.completeEscape(completion)
++
++    /** Delayed action and claim retirement linearize on the pure-state lock. */
++    @JvmStatic fun dispatchEscape(context: Context, wm: WindowManagerInternal,
++        completion: Any, action: EscapeAction): Boolean =
++        state.dispatchEscape(completion, resolver(context, wm)) { owner ->
++            action.run(OwnerEvent(owner.pair, owner.focus, owner.completion))
++        }
++
++    @JvmStatic fun ownerEvent(owner: Any): OwnerEvent = when (owner) {
++        is WonadPolicyKeyContainment.RecentOwner -> OwnerEvent(
++            owner.pair, owner.focus, null)
++        is WonadPolicyKeyContainment.MetaOwner -> OwnerEvent(
++            owner.pair, owner.focus, null)
++        is WonadPolicyKeyContainment.CapsOwner -> OwnerEvent(
++            owner.meta, owner.focus, null)
++        is WonadPolicyKeyContainment.AltTabOwner -> OwnerEvent(
++            owner.tab, owner.focus, null)
++        is WonadPolicyKeyContainment.EscapeOwner -> OwnerEvent(
++            owner.pair, owner.focus, owner.completion)
++        else -> throw IllegalArgumentException("Unknown policy owner")
++    }
++
++    @JvmStatic fun mutationEpoch(): Long = state.mutationEpoch()
++
++    @JvmStatic fun reconcileDevices(present: IntArray, allKeysReleased: Boolean,
++        expectedEpoch: Long): Decision {
++        val raw = state.reconcileDevices(present.toSet(), allKeysReleased, expectedEpoch)
++        return Decision(raw, WonadPolicyKeyContainment.PhysicalPair(-1, -1, 0))
++    }
++
++    @JvmStatic fun removeDevice(device: Int): Decision {
++        val raw = state.removeDevice(device)
++        return Decision(raw, WonadPolicyKeyContainment.PhysicalPair(device, -1, 0))
++    }
++
++    @JvmStatic fun registerCleanupListener(listener: CleanupListener) {
++        check(cleanupListener == null || cleanupListener === listener) {
++            "Wonad policy cleanup listener already registered"
++        }
++        cleanupListener = listener
++    }
++
++    private fun publishCleanup(raw: WonadPolicyKeyContainment.Decision) {
++        cleanupListener?.onCleanup(Decision(raw,
++            WonadPolicyKeyContainment.PhysicalPair(-1, -1, 0)))
++    }
++
++    /** Called synchronously before UiBridge publishes a new containment
++     * barrier. The exact claim—not its display number—is the authority key. */
++    @JvmStatic fun onClaimContainmentChanged(claim: WonadUiBridge.ShortcutClaim,
++        blocked: Boolean) {
++        publishCleanup(state.updateClaimStatus(claim,
++            if (blocked) WonadPolicyKeyContainment.ClaimStatus.BLOCKED else null))
++    }
++
++    /** Called synchronously before UiBridge unpublishes the exact claim. */
++    @JvmStatic fun onClaimRetiring(claim: WonadUiBridge.ShortcutClaim) {
++        publishCleanup(state.updateClaimStatus(
++            claim, WonadPolicyKeyContainment.ClaimStatus.RETIRED))
++    }
++
++    /** Called only after UiBridge unpublishes the exact claim. */
++    @JvmStatic fun onClaimRetired(claim: WonadUiBridge.ShortcutClaim) {
++        state.forgetClaim(claim)
++    }
++
++    @JvmStatic fun claimBlocked(claim: WonadUiBridge.ShortcutClaim): Boolean =
++        state.claimBlocked(claim)
++
++    @JvmStatic fun beginRecentDispatch(owner: Any, mode: Int): Any =
++        WonadPolicyKeyContainment.beginRecentDispatch(
++            owner as WonadPolicyKeyContainment.RecentOwner, dispatchMode(mode))
++    @JvmStatic fun currentRecentDispatch(mode: Int): Any? =
++        WonadPolicyKeyContainment.currentRecentDispatch(dispatchMode(mode))
++    @JvmStatic fun endRecentDispatch(dispatch: Any) =
++        WonadPolicyKeyContainment.endRecentDispatch(
++            dispatch as WonadPolicyKeyContainment.RecentDispatch)
++}

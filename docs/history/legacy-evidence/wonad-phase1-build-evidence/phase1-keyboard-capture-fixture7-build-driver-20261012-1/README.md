@@ -1,0 +1,11 @@
+# Fixture7 root-reviewed successor
+
+Fixture6 ran41 actual Gradle/JUnit cases and failed3 stale manifest assertions. Its original failed receipt3e7fa6a3329801f86d6c551b302d092771b3d33078f4f38864ee85b09ea41201, private project and all outputs remain preserved. Actual XML was copied separately to `../phase1-fixture6-root-failure-review-20261012-1/jvm-results` and proves the exact unexpected normal permission/new launchers.
+
+Root changed only the current repository PaletteFixtureContractTest and PermissionFixtureContractTest to require exact4 permissions (the same3 dangerous permissions plus CAPTURE_KEYBOARD, no duplicates) and the exact14 launcher list, while preserving all other assertions and all41 named test identities. New hashes are911bb49c776767394b96cf89295d2a0dca3b84009f738d20380e09e9809550ca and674d02103f642693805a5fbd7f5141756b012dacc5c95a8f93a52b11bba6fa33 respectively.
+
+The reviewed fixture6 driver/tests were mechanically copied with only fixture6-to7 private paths/names/scope identifiers and those2 source pins changed. Root reviewed the full diff; compile, provenance, no-vendor, memory/disk, exact JVM/manifest/DEX/lint/signer checks and prior fixture5 preservation remain unchanged. Root replayed all24 host tests (b047c7,0.083s), generated a fresh stdout-only plan, and verified the bound current sources/tools and absent new destinations (d68245,exit0).
+
+The new plan SHA is30d9fa9b0d45264888afe862d5cafb40cabb16de2a95abce2246b9eb6fe346d3; driver569112369660bdc41089c6897976dfe25d517cc16a1a86a9850e3621f0ebcf0d; tests c8aff93dfeed6b2a6ea5c09fa0b01fb8b1fcfc7216139224c8f90c0bf1df9cff. The fresh host output is `android/out/native-keyboard-capture-fixture-7`; private project `/work/native-keyboard-capture-fixture7-root` in the exact existing tools container51db8799…/image3932d980…. No old authority/output is overwritten.
+
+The existing tools container is uncapped; explicit JVM heap controls are not whole-descendant RSS bounds. Actual build requires separate root authorization, fresh6GiB available-memory reserve/filesystem floors/no live vendor or other tools work, uses only the existing development debug signer, and remains offline. No guest/runtime/image/OS/SDK/production signing qualification follows from this helper or its host tests.

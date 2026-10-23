@@ -1,0 +1,553 @@
+diff --git a/services/core/java/com/android/server/input/InputManagerService.java b/services/core/java/com/android/server/input/InputManagerService.java
+--- a/services/core/java/com/android/server/input/InputManagerService.java
++++ b/services/core/java/com/android/server/input/InputManagerService.java
+@@ -581,7 +581,7 @@
+         mStickyModifierStateController = new StickyModifierStateController();
+         mInputDataStore = new InputDataStore();
+         mKeyGestureController = new KeyGestureController(mContext, injector.getLooper(),
+-                injector.getIoLooper(), mInputDataStore);
++                injector.getIoLooper(), mInputDataStore, mNative);
+         mKeyboardLedController = new KeyboardLedController(mContext, injector.getLooper(),
+                 mNative);
+         mVirtualInputDeviceController = new VirtualInputDeviceController(
+@@ -2874,13 +2874,31 @@
+ 
+     // Native callback.
+     @SuppressWarnings("unused")
+-    long interceptKeyBeforeDispatching(IBinder focus, KeyEvent event, int policyFlags) {
+-        return mKeyGestureController.interceptKeyBeforeDispatching(focus, event, policyFlags);
++    long interceptKeyBeforeDispatching(IBinder focus, KeyEvent event, int policyFlags,
++            long wonadAdmissionToken) {
++        final Object wonadCall = org.wonad.server.input.WonadPolicyKeyAdapter
++                .beginAdmissionCall(wonadAdmissionToken);
++        long result = -1;
++        try {
++            result = mKeyGestureController.interceptKeyBeforeDispatching(
++                    focus, event, policyFlags, wonadAdmissionToken);
++        } finally {
++            result = org.wonad.server.input.WonadPolicyKeyAdapter.finishAdmissionCall(
++                    wonadCall, result);
++        }
++        return result;
+     }
+ 
+     // Native callback.
+     @SuppressWarnings("unused")
+-    private KeyEvent dispatchUnhandledKey(IBinder focus, KeyEvent event, int policyFlags) {
++    private KeyEvent dispatchUnhandledKey(IBinder focus, KeyEvent event, int policyFlags,
++            boolean wonadClaimed, long wonadAdmissionToken, int wonadDisplayId) {
++        Object wonadUnhandledScope = null;
++        try {
++        wonadUnhandledScope = org.wonad.server.input.WonadPolicyKeyAdapter.beginUnhandled(
++                mWindowManagerInternal, focus, event, wonadClaimed,
++                wonadAdmissionToken, wonadDisplayId);
++        if (wonadClaimed && (focus == null || wonadUnhandledScope == null)) return null;
+         if (interceptUnhandledKey(event, focus)) {
+             return null;
+         }
+@@ -2914,9 +2932,16 @@
+                 event.getDeviceId(), event.getScanCode(),
+                 flags, event.getSource(), event.getDisplayId(), null);
+ 
+-        if (!interceptFallback(focus, fallbackEvent, policyFlags)) {
+-            fallbackEvent.recycle();
+-            fallbackEvent = null;
++        final Object wonadFallbackScope =
++                org.wonad.server.input.WonadPolicyKeyAdapter.beginFallback(
++                        focus, event, fallbackEvent);
++        try {
++            if (!interceptFallback(focus, fallbackEvent, policyFlags)) {
++                fallbackEvent.recycle();
++                fallbackEvent = null;
++            }
++        } finally {
++            org.wonad.server.input.WonadPolicyKeyAdapter.endFallback(wonadFallbackScope);
+         }
+ 
+         if (initialDown) {
+@@ -2926,19 +2951,50 @@
+             fallbackAction.recycle();
+         }
+         return fallbackEvent;
++        } finally {
++            if (wonadClaimed && wonadUnhandledScope == null) {
++                org.wonad.server.input.WonadPolicyKeyAdapter.finishHandled(
++                        wonadAdmissionToken, event.getId(), event.getDeviceId(), event.getKeyCode(),
++                        event.getDownTime(), wonadDisplayId, true);
++            }
++            org.wonad.server.input.WonadPolicyKeyAdapter.endUnhandled(
++                    wonadUnhandledScope);
++        }
++    }
++
++    private void notifyWonadKeyHandled(long wonadAdmissionToken,
++            int eventId, int deviceId, int keyCode,
++            long downTime, int wonadDisplayId, boolean abandoned) {
++        org.wonad.server.input.WonadPolicyKeyAdapter.finishHandled(
++                wonadAdmissionToken, eventId, deviceId, keyCode, downTime, wonadDisplayId, abandoned);
+     }
+ 
+     private boolean interceptFallback(IBinder focusedToken, KeyEvent fallbackEvent,
+             int policyFlags) {
+-        int actions = interceptKeyBeforeQueueing(fallbackEvent, policyFlags);
++        // A fallback derived from a claimed app event must not first execute
++        // PhoneWindowManager/global queue-time policy. KGC below will either
++        // deliver an ordinary fallback to the same claimed app lineage or
++        // consume a fallback which maps to an Android UI/system-action key.
++        int actions = org.wonad.server.input.WonadPolicyKeyAdapter.bypassFallbackQueueing(
++                focusedToken, fallbackEvent)
++                ? ACTION_PASS_TO_USER
++                : interceptKeyBeforeQueueing(fallbackEvent, policyFlags);
+         if ((actions & ACTION_PASS_TO_USER) == 0) {
+             return false;
+         }
+-        long delayMillis = interceptKeyBeforeDispatching(focusedToken, fallbackEvent, policyFlags);
++        long delayMillis = interceptKeyBeforeDispatching(
++                focusedToken, fallbackEvent, policyFlags, 0L);
+         return delayMillis == 0 && !interceptUnhandledKey(fallbackEvent, focusedToken);
+     }
+ 
+     private boolean interceptUnhandledKey(KeyEvent event, IBinder focus) {
++        // Skip KGC/PWM stock shortcut stages for the exact event which was
++        // delivered from a claimed external origin. Returning false still
++        // permits ordinary KeyCharacterMap fallback generation.
++        if (org.wonad.server.input.WonadPolicyKeyAdapter.bypassUnhandledStock(
++                focus, event)) {
++            return false;
++        }
+         if (mKeyGestureController.interceptUnhandledKey(event, focus)) {
+             return true;
+         }
+diff --git a/services/core/java/com/android/server/input/KeyGestureController.java b/services/core/java/com/android/server/input/KeyGestureController.java
+--- a/services/core/java/com/android/server/input/KeyGestureController.java
++++ b/services/core/java/com/android/server/input/KeyGestureController.java
+@@ -163,12 +163,14 @@
+     @LongDef(prefix = {"KEY_INTERCEPT_RESULT_"}, value = {
+             KEY_INTERCEPT_RESULT_NOT_CONSUMED_GO_FALLBACK,
+             KEY_INTERCEPT_RESULT_CONSUMED,
+-            KEY_INTERCEPT_RESULT_NOT_CONSUMED
++            KEY_INTERCEPT_RESULT_NOT_CONSUMED,
++            KEY_INTERCEPT_RESULT_WONAD_CLAIMED_APPLICATION
+     })
+     @Retention(RetentionPolicy.SOURCE)
+     private @interface KeyInterceptResult {
+     }
+ 
++    private static final long KEY_INTERCEPT_RESULT_WONAD_CLAIMED_APPLICATION = -3;
+     private static final long KEY_INTERCEPT_RESULT_NOT_CONSUMED_GO_FALLBACK = -2;
+     static final long KEY_INTERCEPT_RESULT_CONSUMED = -1;
+     static final long KEY_INTERCEPT_RESULT_NOT_CONSUMED = 0;
+@@ -232,6 +234,21 @@
+     private boolean mPendingCapsLockToggle;
+     private boolean mPendingHideRecentSwitcher;
+ 
++    // Exceptional pair-ledger recovery uses only a trusted complete native
++    // all-key-UP census. Ordinary routing never consults or modifies this.
++    @Nullable private final NativeInputManagerService mWonadNativeInput;
++    @Nullable private InputManager mWonadInputManager;
++    private final InputManager.InputDeviceListener mWonadInputDeviceListener =
++            new InputManager.InputDeviceListener() {
++                @Override public void onInputDeviceAdded(int deviceId) {}
++                @Override public void onInputDeviceChanged(int deviceId) {}
++                @Override public void onInputDeviceRemoved(int deviceId) {
++                    if (org.wonad.server.input.WonadPolicyKeyAdapter.removeDevice(deviceId)) {
++                        reconcileWonadPolicyDevices();
++                    }
++                }
++            };
++
+     // Platform behaviors
+     private boolean mHasFeatureWatch;
+     private boolean mHasFeatureLeanback;
+@@ -268,12 +285,24 @@
+ 
+     public KeyGestureController(Context context, Looper looper, Looper ioLooper,
+             InputDataStore inputDataStore) {
+-        this(context, looper, ioLooper, inputDataStore, new Injector());
++        this(context, looper, ioLooper, inputDataStore, new Injector(), null);
++    }
++
++    KeyGestureController(Context context, Looper looper, Looper ioLooper,
++            InputDataStore inputDataStore, NativeInputManagerService nativeInput) {
++        this(context, looper, ioLooper, inputDataStore, new Injector(), nativeInput);
+     }
+ 
+     @VisibleForTesting
+     KeyGestureController(Context context, Looper looper, Looper ioLooper,
+             InputDataStore inputDataStore, Injector injector) {
++        this(context, looper, ioLooper, inputDataStore, injector, null);
++    }
++
++    private KeyGestureController(Context context, Looper looper, Looper ioLooper,
++            InputDataStore inputDataStore, Injector injector,
++            @Nullable NativeInputManagerService nativeInput) {
++        mWonadNativeInput = nativeInput;
+         mContext = context;
+         mHandler = new Handler(looper, this::handleMessage);
+         mIoHandler = new Handler(ioLooper, this::handleIoMessage);
+@@ -531,6 +560,8 @@
+     @SuppressLint("MissingPermission")
+     private void initKeyGestures() {
+         InputManager im = Objects.requireNonNull(mContext.getSystemService(InputManager.class));
++        mWonadInputManager = im;
++        im.registerInputDeviceListener(mWonadInputDeviceListener, mHandler);
+         im.registerKeyGestureEventHandler(
+                 List.of(KeyGestureEvent.KEY_GESTURE_TYPE_ACCESSIBILITY_SHORTCUT_CHORD,
+                         KeyGestureEvent.KEY_GESTURE_TYPE_ACCESSIBILITY_SHORTCUT,
+@@ -591,17 +622,24 @@
+     //     - App launch bookmarks
+     //     - Custom shortcuts added by the user
+     //     - All non-Meta system shortcuts like Ctrl+Space, etc.
+-    public long interceptKeyBeforeDispatching(IBinder focus, KeyEvent event, int policyFlags) {
++    public long interceptKeyBeforeDispatching(IBinder focus, KeyEvent event, int policyFlags,
++            long wonadAdmissionToken) {
+         final int keyCode = event.getKeyCode();
+ 
+-        // Cancel any pending meta actions if we see any other keys being pressed between the
+-        // down of the meta key and its corresponding up.
+-        if (mPendingMetaAction && !KeyEvent.isMetaKey(keyCode)) {
+-            mPendingMetaAction = false;
+-        }
+-        // Any key that is not Alt or Meta cancels Caps Lock combo tracking.
+-        if (mPendingCapsLockToggle && !KeyEvent.isMetaKey(keyCode) && !KeyEvent.isAltKey(keyCode)) {
+-            mPendingCapsLockToggle = false;
++        // Claimed external input must not mutate process-global phone Meta/Caps
++        // bookkeeping. The read-only check also recognizes a retained claimed
++        // pair whose terminal was stamped with a different current display.
++        if (org.wonad.server.input.WonadPolicyKeyAdapter.allowStockBookkeeping(event)) {
++            // Cancel any pending meta actions if we see any other keys being pressed between the
++            // down of the meta key and its corresponding up.
++            if (mPendingMetaAction && !KeyEvent.isMetaKey(keyCode)) {
++                mPendingMetaAction = false;
++            }
++            // Any key that is not Alt or Meta cancels Caps Lock combo tracking.
++            if (mPendingCapsLockToggle && !KeyEvent.isMetaKey(keyCode)
++                    && !KeyEvent.isAltKey(keyCode)) {
++                mPendingCapsLockToggle = false;
++            }
+         }
+ 
+         // Multi-key shortcuts should never be blocked by any focused window configuration
+@@ -617,11 +655,21 @@
+             if (mWindowManagerCallbacks.interceptKeyBeforeDispatching(focus, event)) {
+                 return KEY_INTERCEPT_RESULT_CONSUMED;
+             }
+-            if (org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+-                    mContext, mWindowManagerInternal, event, policyFlags)) {
++            final org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision =
++                    org.wonad.server.input.WonadPolicyKeyAdapter.beforeStock(
++                            mContext, mWindowManagerInternal, focus, event,
++                            wonadPolicyRole(event.getKeyCode()));
++            if (consumeWonadPolicyEvent(event, policyFlags, decision)) {
+                 return KEY_INTERCEPT_RESULT_CONSUMED;
+             }
+             SecurePasteKeyEventHandler.maybeGrantAccess(mWindowManagerInternal, focus, event);
++            if (decision.nativeCompletion) {
++                return org.wonad.server.input.WonadPolicyKeyAdapter.commitNativeCompletion(
++                        mWindowManagerInternal, event, policyFlags,
++                        wonadAdmissionToken, decision)
++                        ? KEY_INTERCEPT_RESULT_WONAD_CLAIMED_APPLICATION
++                        : KEY_INTERCEPT_RESULT_CONSUMED;
++            }
+             return KEY_INTERCEPT_RESULT_NOT_CONSUMED;
+         }
+ 
+@@ -635,6 +683,27 @@
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+ 
++        // Total-control seam. A healthy exact claim either returns ordinary
++        // input to its app or consumes a dedicated Android-desktop UI pair.
++        // It never enters stock before/after-capture shortcut stages.
++        final org.wonad.server.input.WonadPolicyKeyAdapter.Decision wonadDecision =
++                org.wonad.server.input.WonadPolicyKeyAdapter.beforeStock(
++                        mContext, mWindowManagerInternal, focus, event,
++                        wonadPolicyRole(event.getKeyCode()));
++        if (consumeWonadPolicyEvent(event, policyFlags, wonadDecision)) {
++            return KEY_INTERCEPT_RESULT_CONSUMED;
++        }
++        if (wonadDecision.application) {
++            if (!wonadDecision.nativeCompletion) {
++                return KEY_INTERCEPT_RESULT_NOT_CONSUMED;
++            }
++            return org.wonad.server.input.WonadPolicyKeyAdapter.commitNativeCompletion(
++                    mWindowManagerInternal, event, policyFlags,
++                    wonadAdmissionToken, wonadDecision)
++                    ? KEY_INTERCEPT_RESULT_WONAD_CLAIMED_APPLICATION
++                    : KEY_INTERCEPT_RESULT_CONSUMED;
++        }
++
+         // TODO(b/358569822) Remove below once we have nicer API for listening to shortcuts
+         if ((event.isMetaPressed() || KeyEvent.isMetaKey(event.getKeyCode()))
+                 && shouldInterceptShortcuts(focus)
+@@ -646,11 +715,6 @@
+         // Capture shortcuts and system keys that should not be sent to focused window
+         if (mInterceptStages.get(INTERCEPT_STAGE_SHORTCUTS_BEFORE_KEY_CAPTURE).interceptKey(focus,
+                 event)) {
+-            return KEY_INTERCEPT_RESULT_CONSUMED;
+-        }
+-
+-        if (org.wonad.server.input.WonadInputBridge.consumeClaimedInput(
+-                mContext, mWindowManagerInternal, event, policyFlags)) {
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+ 
+@@ -683,6 +747,78 @@
+             return KEY_INTERCEPT_RESULT_CONSUMED;
+         }
+         return KEY_INTERCEPT_RESULT_NOT_CONSUMED;
++    }
++
++    private static int wonadPolicyRole(int keyCode) {
++        return switch (keyCode) {
++            case KeyEvent.KEYCODE_APP_SWITCH ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_APP_SWITCH;
++            case KeyEvent.KEYCODE_RECENT_APPS ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_RECENT_APPS;
++            case KeyEvent.KEYCODE_ALL_APPS ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ALL_APPS;
++            case KeyEvent.KEYCODE_BRIGHTNESS_UP, KeyEvent.KEYCODE_BRIGHTNESS_DOWN,
++                    KeyEvent.KEYCODE_KEYBOARD_BACKLIGHT_DOWN,
++                    KeyEvent.KEYCODE_KEYBOARD_BACKLIGHT_UP,
++                    KeyEvent.KEYCODE_KEYBOARD_BACKLIGHT_TOGGLE,
++                    KeyEvent.KEYCODE_SCREENSHOT, KeyEvent.KEYCODE_SYSRQ,
++                    KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_LOCK,
++                    KeyEvent.KEYCODE_FULLSCREEN, KeyEvent.KEYCODE_ASSIST,
++                    KeyEvent.KEYCODE_VOICE_ASSIST, KeyEvent.KEYCODE_CONTEXTUAL_SEARCH,
++                    KeyEvent.KEYCODE_STYLUS_BUTTON_PRIMARY,
++                    KeyEvent.KEYCODE_STYLUS_BUTTON_SECONDARY,
++                    KeyEvent.KEYCODE_STYLUS_BUTTON_TERTIARY,
++                    KeyEvent.KEYCODE_STYLUS_BUTTON_TAIL,
++                    KeyEvent.KEYCODE_DO_NOT_DISTURB, KeyEvent.KEYCODE_ACCESSIBILITY,
++                    KeyEvent.KEYCODE_NOTIFICATION, KeyEvent.KEYCODE_SEARCH,
++                    KeyEvent.KEYCODE_SETTINGS, KeyEvent.KEYCODE_LANGUAGE_SWITCH ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_SYSTEM_ACTION;
++            case KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_META_RIGHT ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_META;
++            case KeyEvent.KEYCODE_ALT_LEFT, KeyEvent.KEYCODE_ALT_RIGHT ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ALT;
++            case KeyEvent.KEYCODE_TAB ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_TAB;
++            case KeyEvent.KEYCODE_ESCAPE ->
++                    org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ESCAPE;
++            default -> org.wonad.server.input.WonadPolicyKeyAdapter.ROLE_ORDINARY;
++        };
++    }
++
++    private boolean consumeWonadPolicyEvent(@NonNull KeyEvent event, int policyFlags,
++            @NonNull org.wonad.server.input.WonadPolicyKeyAdapter.Decision decision) {
++        final boolean consumed = org.wonad.server.input.WonadPolicyKeyAdapter.consume(
++                mWindowManagerInternal, event, policyFlags, decision);
++        if (decision.saturated
++                && (event.getAction() == KeyEvent.ACTION_UP || event.isCanceled())) {
++            reconcileWonadPolicyDevices();
++        }
++        return consumed;
++    }
++
++    /** Release exceptional fail-black saturation only after an unchanged,
++     * complete native all-device/all-keycode UP census. */
++    private void reconcileWonadPolicyDevices() {
++        final InputManager input = mWonadInputManager;
++        final NativeInputManagerService nativeInput = mWonadNativeInput;
++        if (input == null || nativeInput == null) return;
++        final long expectedEpoch =
++                org.wonad.server.input.WonadPolicyKeyAdapter.mutationEpoch();
++        boolean allKeysReleased = true;
++        for (int keyCode = KeyEvent.KEYCODE_UNKNOWN;
++                keyCode <= KeyEvent.getMaxKeyCode(); keyCode++) {
++            final int state = nativeInput.getKeyCodeState(
++                    /* deviceId = */ -1, InputDevice.SOURCE_ANY, keyCode);
++            if (state == InputManagerService.KEY_STATE_DOWN
++                    || state == InputManagerService.KEY_STATE_VIRTUAL
++                    || (state != InputManagerService.KEY_STATE_UP
++                            && state != InputManagerService.KEY_STATE_UNKNOWN)) {
++                allKeysReleased = false;
++                break;
++            }
++        }
++        org.wonad.server.input.WonadPolicyKeyAdapter.reconcileDevices(
++                input.getInputDeviceIds(), allKeysReleased, expectedEpoch);
+     }
+ 
+     private long interceptMultiKeyCombination(@NonNull KeyEvent event) {
+diff --git a/services/core/jni/com_android_server_input_InputManagerService.cpp b/services/core/jni/com_android_server_input_InputManagerService.cpp
+--- a/services/core/jni/com_android_server_input_InputManagerService.cpp
++++ b/services/core/jni/com_android_server_input_InputManagerService.cpp
+@@ -133,6 +133,7 @@
+     jmethodID interceptMotionBeforeQueueingNonInteractive;
+     jmethodID interceptKeyBeforeDispatching;
+     jmethodID dispatchUnhandledKey;
++    jmethodID notifyWonadKeyHandled;
+     jmethodID onPointerDownOutsideFocus;
+     jmethodID getVirtualKeyQuietTimeMillis;
+     jmethodID getExcludedDeviceNames;
+@@ -470,9 +471,15 @@
+                                        uint32_t& policyFlags) override;
+     std::variant<nsecs_t, inputdispatcher::KeyEntry::InterceptKeyResult>
+     interceptKeyBeforeDispatching(const sp<IBinder>& token, const KeyEvent& keyEvent,
+-                                  uint32_t policyFlags) override;
++                                  uint32_t policyFlags, int64_t wonadAdmissionToken) override;
+     std::optional<KeyEvent> dispatchUnhandledKey(const sp<IBinder>& token, const KeyEvent& keyEvent,
+-                                                 uint32_t policyFlags) override;
++                                                 uint32_t policyFlags,
++                                                 bool wonadClaimed,
++                                                 int64_t wonadAdmissionToken,
++                                                 ui::LogicalDisplayId wonadDisplayId) override;
++    void notifyWonadKeyHandled(const KeyEvent& keyEvent,
++                               int64_t wonadAdmissionToken,
++                               ui::LogicalDisplayId wonadDisplayId, bool abandoned) override;
+     void pokeUserActivity(nsecs_t eventTime, int32_t eventType,
+                           ui::LogicalDisplayId displayId) override;
+     void onPointerDownOutsideFocus(const sp<IBinder>& touchedToken) override;
+@@ -2080,7 +2087,8 @@
+ 
+ std::variant<nsecs_t, inputdispatcher::KeyEntry::InterceptKeyResult>
+ NativeInputManager::interceptKeyBeforeDispatching(const sp<IBinder>& token,
+-                                                  const KeyEvent& keyEvent, uint32_t policyFlags) {
++                                                  const KeyEvent& keyEvent, uint32_t policyFlags,
++                                                  int64_t wonadAdmissionToken) {
+     ATRACE_CALL();
+     // Policy:
+     // - Ignore untrusted events and pass them along.
+@@ -2103,10 +2111,22 @@
+ 
+     const jlong delayMillis =
+             env->CallLongMethod(mServiceObj, gServiceClassInfo.interceptKeyBeforeDispatching,
+-                                tokenObj.get(), keyEventObj.get(), policyFlags);
++                                tokenObj.get(), keyEventObj.get(), policyFlags,
++                                static_cast<jlong>(wonadAdmissionToken));
++    // Clear a callback exception before any further JNI call. Java finally
++    // already rolled back this invocation's exact record on callback failure.
++    const bool callbackFailed =
++            checkAndClearExceptionFromCallback(env, "interceptKeyBeforeDispatching");
+     android_view_KeyEvent_recycle(env, keyEventObj.get());
+-    if (checkAndClearExceptionFromCallback(env, "interceptKeyBeforeDispatching")) {
+-        return 0;
++    const bool recycleFailed =
++            checkAndClearExceptionFromCallback(env, "recycle intercepted KeyEvent");
++    if (callbackFailed || recycleFailed) {
++        // Only an accepted -3 from this very invocation can own a record.
++        // A duplicate/non--3 return must never erase an older registration.
++        if (!callbackFailed && delayMillis == -3) {
++            notifyWonadKeyHandled(keyEvent, wonadAdmissionToken, keyEvent.getDisplayId(), true);
++        }
++        return inputdispatcher::KeyEntry::InterceptKeyResult::SKIP;
+     }
+ 
+     // Negative delay represent states from intercepting the key.
+@@ -2125,16 +2145,37 @@
+         return inputdispatcher::KeyEntry::InterceptKeyResult::FALLBACK;
+     }
+ 
++    // -3 : Deliver while retaining exact native completion authority.
++    if (delayMillis == -3) {
++        return inputdispatcher::KeyEntry::InterceptKeyResult::CONTINUE_WONAD_CLAIMED;
++    }
++
++    if (delayMillis < 0) {
++        ALOGE("Malformed negative key interception result: %" PRId64, delayMillis);
++        return inputdispatcher::KeyEntry::InterceptKeyResult::SKIP;
++    }
++
++    // Prevent duration/wakeup overflow for malformed positive policy.
++    if (delayMillis > 60000) {
++        ALOGE("Excessive key interception delay: %" PRId64, delayMillis);
++        return inputdispatcher::KeyEntry::InterceptKeyResult::SKIP;
++    }
+     return milliseconds_to_nanoseconds(delayMillis);
+ }
+ 
+ std::optional<KeyEvent> NativeInputManager::dispatchUnhandledKey(const sp<IBinder>& token,
+                                                                  const KeyEvent& keyEvent,
+-                                                                 uint32_t policyFlags) {
++                                                                 uint32_t policyFlags,
++                                                                 bool wonadClaimed,
++                                                                 int64_t wonadAdmissionToken,
++                                                                 ui::LogicalDisplayId wonadDisplayId) {
+     ATRACE_CALL();
+     // Policy:
+     // - Ignore untrusted events and do not perform default handling.
+     if ((policyFlags & POLICY_FLAG_TRUSTED) == 0) {
++        if (wonadClaimed) {
++            notifyWonadKeyHandled(keyEvent, wonadAdmissionToken, wonadDisplayId, true);
++        }
+         return {};
+     }
+ 
+@@ -2146,6 +2187,10 @@
+     ScopedLocalRef<jobject> keyEventObj = android_view_KeyEvent_obtainAsCopy(env, keyEvent);
+     if (!keyEventObj.get()) {
+         ALOGE("Failed to obtain key event object for dispatchUnhandledKey.");
++        checkAndClearExceptionFromCallback(env, "obtain unhandled KeyEvent");
++        if (wonadClaimed) {
++            notifyWonadKeyHandled(keyEvent, wonadAdmissionToken, wonadDisplayId, true);
++        }
+         return {};
+     }
+ 
+@@ -2154,11 +2199,23 @@
+                                 env->CallObjectMethod(mServiceObj,
+                                                       gServiceClassInfo.dispatchUnhandledKey,
+                                                       tokenObj.get(), keyEventObj.get(),
+-                                                      policyFlags));
+-
++                                                      policyFlags,
++                                                      wonadClaimed ? JNI_TRUE : JNI_FALSE,
++                                                      static_cast<jlong>(wonadAdmissionToken),
++                                                      wonadDisplayId.val()));
++
++    const bool unhandledFailed =
++            checkAndClearExceptionFromCallback(env, "dispatchUnhandledKey");
+     android_view_KeyEvent_recycle(env, keyEventObj.get());
+-    if (checkAndClearExceptionFromCallback(env, "dispatchUnhandledKey") ||
+-        !fallbackKeyEventObj.get()) {
++    const bool unhandledRecycleFailed =
++            checkAndClearExceptionFromCallback(env, "recycle unhandled KeyEvent");
++    if (unhandledFailed || unhandledRecycleFailed) {
++        if (wonadClaimed) {
++            notifyWonadKeyHandled(keyEvent, wonadAdmissionToken, wonadDisplayId, true);
++        }
++        return {};
++    }
++    if (!fallbackKeyEventObj.get()) {
+         return {};
+     }
+ 
+@@ -2166,6 +2223,19 @@
+             android_view_KeyEvent_obtainAsCopy(env, fallbackKeyEventObj.get());
+     android_view_KeyEvent_recycle(env, fallbackKeyEventObj.get());
+     return fallbackEvent;
++}
++
++void NativeInputManager::notifyWonadKeyHandled(
++        const KeyEvent& keyEvent, int64_t wonadAdmissionToken,
++        ui::LogicalDisplayId wonadDisplayId, bool abandoned) {
++    JNIEnv* env = jniEnv();
++    ScopedLocalFrame localFrame(env);
++    env->CallVoidMethod(mServiceObj, gServiceClassInfo.notifyWonadKeyHandled,
++                        static_cast<jlong>(wonadAdmissionToken),
++                        keyEvent.getId(), keyEvent.getDeviceId(), keyEvent.getKeyCode(),
++                        nanoseconds_to_milliseconds(keyEvent.getDownTime()), wonadDisplayId.val(),
++                        abandoned ? JNI_TRUE : JNI_FALSE);
++    checkAndClearExceptionFromCallback(env, "notifyWonadKeyHandled");
+ }
+ 
+ void NativeInputManager::pokeUserActivity(nsecs_t eventTime, int32_t eventType,
+@@ -3881,11 +3951,14 @@
+ 
+     GET_METHOD_ID(gServiceClassInfo.interceptKeyBeforeDispatching, clazz,
+             "interceptKeyBeforeDispatching",
+-            "(Landroid/os/IBinder;Landroid/view/KeyEvent;I)J");
++            "(Landroid/os/IBinder;Landroid/view/KeyEvent;IJ)J");
+ 
+     GET_METHOD_ID(gServiceClassInfo.dispatchUnhandledKey, clazz,
+             "dispatchUnhandledKey",
+-            "(Landroid/os/IBinder;Landroid/view/KeyEvent;I)Landroid/view/KeyEvent;");
++            "(Landroid/os/IBinder;Landroid/view/KeyEvent;IZJI)Landroid/view/KeyEvent;");
++
++    GET_METHOD_ID(gServiceClassInfo.notifyWonadKeyHandled, clazz,
++            "notifyWonadKeyHandled", "(JIIIJIZ)V");
+ 
+     GET_METHOD_ID(gServiceClassInfo.notifyStickyModifierStateChanged, clazz,
+                   "notifyStickyModifierStateChanged", "(II)V");

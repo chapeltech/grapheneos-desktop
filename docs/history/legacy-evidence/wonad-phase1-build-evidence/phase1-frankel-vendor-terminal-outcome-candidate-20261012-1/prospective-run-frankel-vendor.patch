@@ -1,0 +1,45 @@
+--- a/android/tools/run_frankel_vendor.py
++++ b/android/tools/run_frankel_vendor.py
+@@ -964,10 +964,13 @@
+     if stopped:
+         require(state.get("Status") == "exited" and state.get("Running") is False and
+                 state.get("Paused") is False and state.get("Restarting") is False and
+-                state.get("Dead") is False and state.get("Pid") == 0 and
+-                state.get("OOMKilled") is False and isinstance(state.get("ExitCode"), int) and
+-                state.get("StartedAt") not in (None, "0001-01-01T00:00:00Z") and
+-                state.get("FinishedAt") not in (None, "0001-01-01T00:00:00Z"),
++                state.get("Dead") is False and type(state.get("Pid")) is int and
++                state.get("Pid") == 0 and type(state.get("OOMKilled")) is bool and
++                type(state.get("ExitCode")) is int and
++                isinstance(state.get("StartedAt"), str) and
++                state["StartedAt"] not in ("", "0001-01-01T00:00:00Z") and
++                isinstance(state.get("FinishedAt"), str) and
++                state["FinishedAt"] not in ("", "0001-01-01T00:00:00Z"),
+                 "Owned container is not authoritatively stopped")
+     else:
+         require(state.get("Status") == "created" and state.get("Running") is False and
+@@ -1016,6 +1019,16 @@
+     if cleanup_error is not None:
+         return "failed_cleanup"
+     return "generated"
++
++
++def require_successful_stopped_build(primary_exit, stopped, stopped_inspect):
++    """Build success is separate from exact terminal-state authority to clean caches."""
++    require(stopped is True and isinstance(stopped_inspect, dict) and
++            type(primary_exit) is int and primary_exit == 0 and
++            type(stopped_inspect.get("exit_code")) is int and
++            stopped_inspect["exit_code"] == 0 and
++            stopped_inspect.get("oom_killed") is False,
++            "Vendor generation requires proven stopped zero exit without OOM")
+ 
+ 
+ def source_cleanup_is_safe(create_attempted, container_identity, authoritatively_stopped):
+@@ -1291,6 +1304,7 @@
+             generated = None
+             if status == "generated":
+                 try:
++                    require_successful_stopped_build(primary_exit, stopped, stopped_inspect_ref)
+                     generated = verify_generated_vendor(config)
+                 except BaseException as error:
+                     primary_error = error

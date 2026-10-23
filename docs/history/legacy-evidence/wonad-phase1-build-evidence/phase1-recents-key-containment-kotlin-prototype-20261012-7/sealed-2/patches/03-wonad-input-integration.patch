@@ -1,0 +1,1015 @@
+diff --git a/android/input-integration/src/org/wonad/server/input/WonadInputBridge.kt b/android/input-integration/src/org/wonad/server/input/WonadInputBridge.kt
+--- a/android/input-integration/src/org/wonad/server/input/WonadInputBridge.kt
++++ b/android/input-integration/src/org/wonad/server/input/WonadInputBridge.kt
+@@ -103,6 +103,7 @@
+      * replacement token until this exact cleanup completes. A delayed old
+      * callback therefore cannot release replacement Rust state. */
+     @JvmStatic internal fun onUiClaimRetired(expected: WonadUiBridge.ShortcutClaim) {
++        WonadPolicyKeyAdapter.onClaimRetired(expected)
+         val owner = synchronized(lock) { owners[expected.display] }
+         if (owner?.claim === expected) clear(owner)
+     }
+@@ -245,7 +246,8 @@
+         val owner = exactOwner(display)
+         val invalid = state != null && try {
+             val now = SystemClock.elapsedRealtime()
+-            !claimActive(context, wm, state, now) ||
++            WonadPolicyKeyAdapter.claimBlocked(state.claim) ||
++                !claimActive(context, wm, state, now) ||
+                 (owner != null && !ownerActive(context, wm, owner, state, now))
+         } catch (error: Throwable) {
+             if (error !is Exception && error !is LinkageError) throw error
+@@ -253,6 +255,29 @@
+             true
+         }
+         return WonadUiBridge.consumeInput(display) || failedBridgeConsumes(display) || invalid
++    }
++
++    /** Private exact-claim lifecycle wiring; no public API is added. */
++    @JvmStatic internal fun onUiClaimContainmentChanged(
++        expected: WonadUiBridge.ShortcutClaim, blocked: Boolean) {
++        WonadPolicyKeyAdapter.onClaimContainmentChanged(expected, blocked)
++    }
++
++    @JvmStatic internal fun onUiClaimRetiring(expected: WonadUiBridge.ShortcutClaim) {
++        WonadPolicyKeyAdapter.onClaimRetiring(expected)
++    }
++
++    internal fun policyClaimBlocked(context: Context, wm: WindowManagerInternal,
++        display: Int): Boolean = claimedInputBlocked(context, wm, display)
++
++    /** Observe only the original event. A retained claim selects old private
++     * owner metadata; it cannot grant eligibility or manufacture a command. */
++    internal fun policyDrainContained(wm: WindowManagerInternal, event: KeyEvent,
++        policyFlags: Int, claim: WonadUiBridge.ShortcutClaim?) {
++        val owner = claim?.let { retained -> synchronized(lock) {
++            owners[retained.display]?.takeIf { it.claim === retained }
++        } }
++        drainContained(wm, event, policyFlags, owner)
+     }
+ 
+     /** Early policy seam for paste/action/app-capture branches which return
+diff --git a/android/input-integration/src/com/android/server/wm/WonadUiBridge.kt b/android/input-integration/src/com/android/server/wm/WonadUiBridge.kt
+--- a/android/input-integration/src/com/android/server/wm/WonadUiBridge.kt
++++ b/android/input-integration/src/com/android/server/wm/WonadUiBridge.kt
+@@ -96,10 +96,24 @@
+         display in blankDisplays || display in protectedInputDisplays
+ 
+     private fun publishInputContainment() {
+-        blankDisplays = claims.values.filter { it.blank }.map { it.dc.displayId }.toSet() +
++        val nextBlank = claims.values.filter { it.blank }.map { it.dc.displayId }.toSet() +
+             departingInputBarriers.keys
+-        protectedInputDisplays = claims.values.filter { it.protectedInput }
++        val nextProtected = claims.values.filter { it.protectedInput }
+             .map { it.dc.displayId }.toSet()
++        val before = blankDisplays + protectedInputDisplays
++        val after = nextBlank + nextProtected
++        (after - before).forEach { display ->
++            shortcutClaimStates[display]?.claim?.let {
++                WonadInputBridge.onUiClaimContainmentChanged(it, true)
++            }
++        }
++        blankDisplays = nextBlank
++        protectedInputDisplays = nextProtected
++        (before - after).forEach { display ->
++            shortcutClaimStates[display]?.claim?.let {
++                WonadInputBridge.onUiClaimContainmentChanged(it, false)
++            }
++        }
+     }
+ 
+     private fun beginDepartingInputBarrier(display: Int) {
+@@ -132,13 +146,12 @@
+     internal fun shortcutClaimCurrent(expected: ShortcutClaim): Boolean =
+         shortcutClaimStates[expected.display]?.claim === expected
+ 
+-    /** Publish removal before touching the old input owner. A new token is not
+-     * visible until exact old-owner cleanup has completed, so releaseDisplay
+-     * can never revoke a replacement shortcut slot with the same display id. */
++    /** Mark exact pair state retired before unpublishing old authority. */
+     private fun retireShortcutClaim(claim: Claim) {
+         val previous = shortcutClaimStates[claim.dc.displayId]?.claim?.takeIf {
+             it.incarnation == claim.incarnation
+         } ?: return
++        WonadInputBridge.onUiClaimRetiring(previous)
+         shortcutClaimStates = shortcutClaimStates - claim.dc.displayId
+         WonadInputBridge.onUiClaimRetired(previous)
+     }
+@@ -159,6 +172,7 @@
+             return
+         }
+         if (previous != null) {
++            WonadInputBridge.onUiClaimRetiring(previous)
+             shortcutClaimStates = shortcutClaimStates - claim.dc.displayId
+             // If exact old-owner cleanup raises a fatal error, this method
+             // stops here and cannot publish replacement authority.
+@@ -168,6 +182,9 @@
+             claim.incarnation, owner)
+         shortcutClaimStates = shortcutClaimStates + (claim.dc.displayId to
+             ShortcutClaimState(token, claim.expires))
++        if (consumeInput(token.display)) {
++            WonadInputBridge.onUiClaimContainmentChanged(token, true)
++        }
+     }
+ 
+     @JvmStatic fun owns(dc: DisplayContent): Boolean = claims[dc.displayId]?.dc === dc
+diff --git a/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyContainment.kt b/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyContainment.kt
+new file mode 100644
+--- /dev/null
++++ b/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyContainment.kt
+@@ -0,0 +1,407 @@
++package org.wonad.server.input
++
++import java.util.IdentityHashMap
++
++/**
++ * Bounded, identity-exact routing state for the KeyGestureController seam.
++ *
++ * Platform safety chords and SecurePaste run before this state machine. Once
++ * an event reaches it, an exact healthy claimed external origin has only two
++ * outcomes: ordinary/modifier/Escape input is returned to the application, or
++ * an Android-desktop UI key is consumed as an exact physical pair. No healthy
++ * claimed event enters Android's stock global-shortcut or Recents stages.
++ */
++internal class WonadPolicyKeyContainment(
++    private val maximumPairs: Int = 256,
++) {
++    init { require(maximumPairs >= 8) }
++
++    internal enum class Role {
++        ORDINARY,
++        APP_SWITCH,
++        RECENT_APPS,
++        ALL_APPS,
++        SYSTEM_ACTION,
++        META,
++        ALT,
++        TAB,
++        ESCAPE,
++    }
++
++    internal enum class Action { DOWN, UP }
++    internal enum class ClaimStatus { HEALTHY, BLOCKED, RETIRED }
++    internal enum class Route { STOCK, APPLICATION, CONSUME }
++
++    internal data class PhysicalPair(
++        val device: Int,
++        val keyCode: Int,
++        val downTime: Long,
++    )
++
++    private data class Slot(val device: Int, val keyCode: Int)
++
++    /** Exact private Android object identities plus immutable scalar mirrors. */
++    internal class ClaimLineage(
++        internal val claim: Any,
++        internal val display: Int,
++        internal val user: Int,
++        internal val generation: Long,
++        internal val incarnation: Long,
++        internal val binder: Any,
++    ) {
++        internal fun sameExact(other: ClaimLineage?): Boolean = other != null &&
++            claim === other.claim && binder === other.binder &&
++            display == other.display && user == other.user &&
++            generation == other.generation && incarnation == other.incarnation
++    }
++
++    internal data class Event(
++        val physical: PhysicalPair,
++        val display: Int,
++        val action: Action,
++        val repeat: Int,
++        val canceled: Boolean,
++        val altPressed: Boolean,
++    ) {
++        internal val firstDown: Boolean get() = action == Action.DOWN && repeat == 0
++        internal val terminal: Boolean get() = action == Action.UP || canceled
++    }
++
++    /** Retained exact pair. [route] never changes after the first DOWN. */
++    internal class PairToken(
++        internal val physical: PhysicalPair,
++        internal val role: Role,
++        internal val display: Int,
++        // null is an unclaimed/phone pair whose initial DOWN was admitted to
++        // stock policy.  That exact pair remains stock through its terminal,
++        // even if a claim is published in the meantime.
++        internal val origin: ClaimLineage?,
++        internal val route: Route,
++    )
++
++    private class Record(
++        val token: PairToken,
++        var draining: Boolean,
++    )
++
++    internal data class Decision(
++        val route: Route,
++        val pair: PairToken?,
++        val saturated: Boolean,
++    ) {
++        val consume: Boolean get() = route == Route.CONSUME
++        val application: Boolean get() = route == Route.APPLICATION
++        val stock: Boolean get() = route == Route.STOCK
++    }
++
++    /** Pure token captured before fallible framework state is read. */
++    internal data class ObservationRequest(
++        internal val physical: PhysicalPair,
++        internal val lifecycleEpoch: Long,
++        internal val origins: List<ClaimLineage>,
++    )
++
++    /** Immutable result of framework reads made with no helper monitor held. */
++    internal data class ObservedClaim(
++        internal val origin: ClaimLineage,
++        internal val status: ClaimStatus,
++    )
++
++    internal data class Observation(
++        internal val request: ObservationRequest,
++        internal val claims: List<ObservedClaim>,
++    ) {
++        internal fun status(origin: ClaimLineage): ClaimStatus? =
++            claims.firstOrNull { it.origin.sameExact(origin) }?.status
++    }
++
++    private val active = LinkedHashMap<Slot, Record>()
++    // A replacement DOWN must not allow the displaced physical UP to affect a
++    // new phone or claim owner reusing the same device/key slot.
++    private val drains = LinkedHashMap<PhysicalPair, PairToken>()
++    private val claimStatus = IdentityHashMap<Any, ClaimStatus>()
++    // Exhaustion is isolated to the physical device which could no longer be
++    // represented exactly.  A different phone keyboard remains stock.
++    private val saturatedDevices = LinkedHashSet<Int>()
++    private var mutationEpoch = 1L
++    private var lifecycleEpoch = 1L
++
++    private fun mutated() {
++        mutationEpoch = Math.addExact(mutationEpoch, 1L)
++    }
++
++    private fun sameOrigin(left: ClaimLineage?, right: ClaimLineage?): Boolean =
++        left != null && left.sameExact(right)
++
++    private fun addDrain(token: PairToken) {
++        if (drains.size >= maximumPairs && token.physical !in drains) {
++            // Exact authority cannot be silently evicted. Exceptional ledger
++            // exhaustion is released only by a trusted complete key census.
++            saturatedDevices += token.physical.device
++            return
++        }
++        drains[token.physical] = token
++    }
++
++    private fun retire(record: Record, retainDrain: Boolean) {
++        record.draining = true
++        if (retainDrain) addDrain(record.token)
++    }
++
++    private fun claimedRoute(event: Event, role: Role): Route = when (role) {
++        Role.APP_SWITCH, Role.RECENT_APPS, Role.ALL_APPS, Role.SYSTEM_ACTION -> Route.CONSUME
++        // Consume only the Tab pair. The ordinary Alt DOWN/UP pair remains
++        // balanced application input and never creates Android Alt-Tab state.
++        Role.TAB -> if (event.altPressed) Route.CONSUME else Route.APPLICATION
++        else -> Route.APPLICATION
++    }
++
++    /** Claimed traffic and no-claim/phone traffic have independent reserves. */
++    private fun activeAtCapacity(origin: ClaimLineage?): Boolean =
++        active.values.count { (it.token.origin == null) == (origin == null) } >= maximumPairs
++
++    private fun status(origin: ClaimLineage, observation: Observation): ClaimStatus {
++        val published = claimStatus[origin.claim]
++        if (observation.request.lifecycleEpoch != lifecycleEpoch) return ClaimStatus.RETIRED
++        val observed = observation.status(origin) ?: return ClaimStatus.RETIRED
++        // Either the synchronous lifecycle mirror or external framework state
++        // can make an origin less authoritative; neither can make it healthier.
++        return when {
++            published == ClaimStatus.RETIRED || observed == ClaimStatus.RETIRED ->
++                ClaimStatus.RETIRED
++            published == ClaimStatus.BLOCKED || observed == ClaimStatus.BLOCKED ->
++                ClaimStatus.BLOCKED
++            else -> ClaimStatus.HEALTHY
++        }
++    }
++
++    /**
++     * Capture only immutable identities while holding the helper monitor.
++     * The adapter releases this monitor, performs all WMS/settings/framework
++     * reads, then supplies their immutable results to [beforeStock].
++     */
++    @Synchronized
++    internal fun prepareObservation(
++        event: Event,
++        currentOrigin: ClaimLineage?,
++    ): ObservationRequest {
++        val origins = ArrayList<ClaimLineage>(2)
++        active[Slot(event.physical.device, event.physical.keyCode)]?.token?.origin?.let {
++            if (it.sameExact(currentOrigin).not()) origins += it
++        }
++        currentOrigin?.let { origins += it }
++        return ObservationRequest(event.physical, lifecycleEpoch, origins)
++    }
++
++    /**
++     * Read-only decision for stock's two global pending-Boolean clears which
++     * occur before multi-key safety. A claimed or retained claimed event must
++     * not cancel an unrelated phone Meta/Caps sequence.
++     */
++    @Synchronized
++    internal fun allowStockBookkeeping(
++        event: Event,
++        currentOrigin: ClaimLineage?,
++        currentDisplayBlocked: Boolean,
++    ): Boolean {
++        val record = active[Slot(event.physical.device, event.physical.keyCode)]
++        // Preserve the exact terminal bookkeeping for a stock DOWN which was
++        // admitted before this display became claimed.
++        if (record != null && record.token.physical == event.physical &&
++            record.token.origin == null) return record.token.route == Route.STOCK
++        if (event.physical.device in saturatedDevices || currentDisplayBlocked ||
++            currentOrigin != null) return false
++        if (event.physical in drains) return false
++        return record == null || record.token.physical != event.physical
++    }
++
++    /**
++     * Observe one physical event after platform safety, SecurePaste policy and
++     * fixed Wonad/Rust command priority.
++     */
++    @Synchronized
++    internal fun beforeStock(
++        event: Event,
++        role: Role,
++        currentOrigin: ClaimLineage?,
++        currentDisplayBlocked: Boolean,
++        observation: Observation,
++    ): Decision {
++        mutated()
++        var deviceSaturated = event.physical.device in saturatedDevices
++        val observationMatches = observation.request.physical == event.physical
++
++        // Exact late UP from a displaced pair is always drained. It cannot
++        // clear or complete the replacement occupying the same device/key.
++        drains[event.physical]?.let { token ->
++            if (event.terminal) drains.remove(event.physical)
++            return Decision(Route.CONSUME, token, deviceSaturated)
++        }
++
++        val slot = Slot(event.physical.device, event.physical.keyCode)
++        var record = active[slot]
++
++        if (event.firstDown && record != null &&
++            record.token.physical.downTime != event.physical.downTime) {
++            active.remove(slot)
++            retire(record, retainDrain = true)
++            deviceSaturated = event.physical.device in saturatedDevices
++            record = null
++        }
++
++        if (record != null && record.token.physical == event.physical) {
++            // Initial-DOWN authority is stable for the whole physical pair.
++            // In particular, a phone/unclaimed DOWN completes stock policy
++            // after claim publication rather than being retroactively stolen.
++            if (record.token.origin == null) {
++                if (event.terminal) active.remove(slot)
++                return Decision(record.token.route, record.token, deviceSaturated)
++            }
++            val healthy = observationMatches &&
++                status(record.token.origin, observation) == ClaimStatus.HEALTHY
++            // A migrated event stamped with a different claim or phone display
++            // remains the original external physical pair and must not leak.
++            val exactCurrent = sameOrigin(record.token.origin, currentOrigin)
++            if (deviceSaturated || currentDisplayBlocked || !healthy || !exactCurrent) {
++                record.draining = true
++            }
++            val route = if (record.draining) Route.CONSUME else record.token.route
++            if (event.terminal) active.remove(slot)
++            return Decision(route, record.token, deviceSaturated)
++        }
++
++        if (currentOrigin == null) {
++            // A sticky blank/protected barrier can outlive publication of the
++            // exact shortcut claim. It remains fail-black.
++            val route = if (deviceSaturated || currentDisplayBlocked) {
++                Route.CONSUME
++            } else {
++                Route.STOCK
++            }
++            if (event.action == Action.DOWN) {
++                val token = PairToken(event.physical, role, event.display, origin = null,
++                    route = route)
++                if (activeAtCapacity(origin = null) && slot !in active) {
++                    saturatedDevices += event.physical.device
++                    return Decision(Route.CONSUME, token, saturated = true)
++                }
++                active[slot] = Record(token, draining = route == Route.CONSUME)
++                return Decision(route, token,
++                    event.physical.device in saturatedDevices)
++            }
++            return Decision(route, null, deviceSaturated)
++        }
++
++        val healthy = observationMatches &&
++            status(currentOrigin, observation) == ClaimStatus.HEALTHY
++        val route = if (deviceSaturated || currentDisplayBlocked || !healthy) {
++            Route.CONSUME
++        } else {
++            claimedRoute(event, role)
++        }
++
++        // Repeat-without-DOWN is not allowed to enter stock policy. Retain it
++        // when possible so its terminal is routed consistently.
++        if (event.action == Action.DOWN) {
++            val token = PairToken(event.physical, role, event.display, currentOrigin, route)
++            if (activeAtCapacity(currentOrigin) && slot !in active) {
++                saturatedDevices += event.physical.device
++                return Decision(Route.CONSUME, token, saturated = true)
++            }
++            active[slot] = Record(token, draining = route == Route.CONSUME)
++            return Decision(route, token,
++                event.physical.device in saturatedDevices)
++        }
++
++        // A claimed terminal observed without its DOWN cannot invoke Android
++        // stock UI. It is consumed rather than manufacturing owner state.
++        return Decision(Route.CONSUME, null, deviceSaturated)
++    }
++
++    @Synchronized
++    internal fun onClaimContainmentChanged(origin: ClaimLineage, blocked: Boolean) {
++        mutated()
++        lifecycleEpoch = Math.addExact(lifecycleEpoch, 1L)
++        claimStatus[origin.claim] = if (blocked) ClaimStatus.BLOCKED else ClaimStatus.HEALTHY
++        if (blocked) {
++            active.values.filter { sameOrigin(it.token.origin, origin) }
++                .forEach { it.draining = true }
++        }
++    }
++
++    /**
++     * Convert one provisionally admitted application pair to permanent drain
++     * when the bounded native-completion registry cannot publish its exact
++     * authority.  The PairToken identity prevents a colliding/replacement
++     * event from draining some newer occupant of the same device/key slot.
++     */
++    @Synchronized
++    internal fun failApplicationPair(token: PairToken?, physical: PhysicalPair): Boolean {
++        mutated()
++        if (token == null || token.route != Route.APPLICATION || token.physical != physical) {
++            return false
++        }
++        val slot = Slot(physical.device, physical.keyCode)
++        val record = active[slot] ?: return false
++        if (record.token !== token || record.token.physical != physical) return false
++        record.draining = true
++        return true
++    }
++
++    @Synchronized
++    internal fun onClaimRetiring(origin: ClaimLineage) {
++        mutated()
++        lifecycleEpoch = Math.addExact(lifecycleEpoch, 1L)
++        claimStatus[origin.claim] = ClaimStatus.RETIRED
++        active.values.filter { sameOrigin(it.token.origin, origin) }
++            .forEach { it.draining = true }
++    }
++
++    @Synchronized
++    internal fun onClaimRetired(origin: ClaimLineage) {
++        mutated()
++        lifecycleEpoch = Math.addExact(lifecycleEpoch, 1L)
++        claimStatus.remove(origin.claim)
++    }
++
++    @Synchronized
++    internal fun claimStatus(origin: ClaimLineage): ClaimStatus? = claimStatus[origin.claim]
++
++    @Synchronized
++    internal fun removeDevice(device: Int): Boolean {
++        mutated()
++        active.entries.removeIf { it.key.device == device }
++        drains.entries.removeIf { it.key.device == device }
++        saturatedDevices.remove(device)
++        return saturatedDevices.isNotEmpty()
++    }
++
++    @Synchronized internal fun mutationEpoch(): Long = mutationEpoch
++
++    /**
++     * Release exceptional saturation only from an unchanged complete native
++     * all-key-UP census. Device removal alone cannot prove that no DOWN raced.
++     */
++    @Synchronized
++    internal fun reconcileDevices(
++        presentDevices: Set<Int>,
++        allKeysReleased: Boolean,
++        expectedEpoch: Long,
++    ): Boolean {
++        if (expectedEpoch != mutationEpoch) return saturatedDevices.isNotEmpty()
++        mutated()
++        active.entries.removeIf { it.key.device !in presentDevices }
++        drains.entries.removeIf { it.key.device !in presentDevices }
++        saturatedDevices.removeIf { it !in presentDevices }
++        if (saturatedDevices.isNotEmpty() && allKeysReleased) {
++            active.clear()
++            drains.clear()
++            saturatedDevices.clear()
++        }
++        return saturatedDevices.isNotEmpty()
++    }
++
++    @Synchronized internal fun activeCount(): Int = active.size
++    @Synchronized internal fun drainCount(): Int = drains.size
++
++}
+diff --git a/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyAdapter.kt b/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyAdapter.kt
+new file mode 100644
+--- /dev/null
++++ b/android/input-integration/src/org/wonad/server/input/WonadPolicyKeyAdapter.kt
+@@ -0,0 +1,483 @@
++package org.wonad.server.input
++
++import android.content.Context
++import android.os.IBinder
++import android.view.KeyEvent
++import com.android.server.wm.WindowManagerInternal
++import com.android.server.wm.WonadUiBridge
++
++/** Minimal Java-facing adapter. Only private platform JNI/policy wiring changes. */
++internal object WonadPolicyKeyAdapter {
++    const val ROLE_ORDINARY = 0
++    const val ROLE_APP_SWITCH = 1
++    const val ROLE_RECENT_APPS = 2
++    const val ROLE_ALL_APPS = 3
++    const val ROLE_SYSTEM_ACTION = 4
++    const val ROLE_META = 5
++    const val ROLE_ALT = 6
++    const val ROLE_TAB = 7
++    const val ROLE_ESCAPE = 8
++
++    class Decision internal constructor(
++        internal val raw: WonadPolicyKeyContainment.Decision,
++        private val physical: WonadPolicyKeyContainment.PhysicalPair,
++        private val display: Int,
++        @JvmField val nativeCompletion: Boolean,
++    ) {
++        @JvmField val consume = raw.consume
++        @JvmField val application = raw.application
++        @JvmField val stock = raw.stock
++        @JvmField val saturated = raw.saturated
++        @JvmField val pair: Any? = raw.pair
++
++        internal fun matches(value: KeyEvent): Boolean =
++            physical.device == value.deviceId &&
++                physical.keyCode == value.keyCode &&
++                physical.downTime == value.downTime && display == value.displayId
++    }
++
++    private val state = WonadPolicyKeyContainment()
++    private const val MAX_PENDING_EVENTS = 256
++
++    internal data class DeliveredAuthority(
++        val token: Long,
++        val eventId: Int,
++        val physical: WonadPolicyKeyContainment.PhysicalPair,
++        val display: Int,
++        val origin: WonadPolicyKeyContainment.ClaimLineage,
++        val pair: WonadPolicyKeyContainment.PairToken,
++    )
++    private val deliveryLock = Any()
++    /*
++     * Only the private native nonce is the completion key. KeyEvent.id is
++     * collision-prone evidence, never authority. Native F1/F2 re-resolution
++     * follows the exact KeyEntry but still leaves raw target isolation OPEN.
++     */
++    private val deliveries = LinkedHashMap<Long, DeliveredAuthority>()
++
++    internal class AdmissionCall internal constructor(
++        internal val token: Long,
++        internal val previous: AdmissionCall?,
++    ) {
++        internal var registered: DeliveredAuthority? = null
++        internal var provisional: WonadPolicyKeyContainment.PairToken? = null
++    }
++    private val admissionCall = ThreadLocal<AdmissionCall?>()
++
++    @JvmStatic
++    fun beginAdmissionCall(token: Long): Any = AdmissionCall(token, admissionCall.get()).also {
++        admissionCall.set(it)
++    }
++
++    /** Compare-own-record rollback: duplicate/non--3 calls cannot remove another call's record. */
++    @JvmStatic
++    fun finishAdmissionCall(value: Any, result: Long): Long {
++        val call = value as AdmissionCall
++        check(admissionCall.get() === call) { "Admission call order changed" }
++        val accepted = synchronized(deliveryLock) {
++            val own = call.registered
++            if (result == -3L && own != null && deliveries[call.token] === own) {
++                true
++            } else {
++                if (own != null && deliveries[call.token] === own) deliveries.remove(call.token)
++                false
++            }
++        }
++        if (result != -3L || !accepted) {
++            call.provisional?.let { state.failApplicationPair(it, it.physical) }
++        }
++        admissionCall.set(call.previous)
++        return if (result == -3L && !accepted) -1L else result
++    }
++
++    internal class UnhandledScope private constructor(
++        internal val focus: IBinder?,
++        internal val sourceEvent: KeyEvent,
++        internal val eventId: Int,
++        internal val physical: WonadPolicyKeyContainment.PhysicalPair,
++        internal val display: Int,
++        val origin: WonadPolicyKeyContainment.ClaimLineage?,
++        val blocked: Boolean,
++        internal val trustedClaimed: Boolean,
++        internal val previous: UnhandledScope?,
++        internal val previousFallback: FallbackScope?,
++    ) {
++        companion object {
++            internal fun create(focus: IBinder?, sourceEvent: KeyEvent, eventId: Int,
++                physical: WonadPolicyKeyContainment.PhysicalPair, admittedDisplay: Int,
++                retained: DeliveredAuthority?, exactTarget: Boolean,
++                trustedClaimed: Boolean,
++                previous: UnhandledScope?,
++                previousFallback: FallbackScope?,
++            ): UnhandledScope {
++                val exact = exactTarget && retained != null && retained.eventId == eventId &&
++                    retained.physical == physical && retained.display == admittedDisplay
++                return UnhandledScope(
++                    focus, sourceEvent, eventId, physical, admittedDisplay,
++                    retained?.origin?.takeIf { exact }, !exact, trustedClaimed,
++                    previous, previousFallback)
++            }
++        }
++    }
++    private val unhandledScope = ThreadLocal<UnhandledScope?>()
++
++    /**
++     * Exact synchronous derivation scope. It exists only between a successful
++     * KeyCharacterMap lookup and the matching interceptFallback return. The
++     * previous link supports re-entrant Java stacks without retaining history.
++     */
++    internal class FallbackScope private constructor(
++        internal val focus: IBinder,
++        internal val fallbackEvent: KeyEvent,
++        internal val physical: WonadPolicyKeyContainment.PhysicalPair,
++        internal val display: Int,
++        internal val origin: WonadPolicyKeyContainment.ClaimLineage?,
++        internal val blocked: Boolean,
++        internal val previous: FallbackScope?,
++    ) {
++        companion object {
++            internal fun create(focus: IBinder, fallbackEvent: KeyEvent,
++                physical: WonadPolicyKeyContainment.PhysicalPair,
++                display: Int,
++                authority: UnhandledScope,
++                previous: FallbackScope?,
++            ) = FallbackScope(
++                focus, fallbackEvent, physical, display, authority.origin,
++                authority.blocked, previous)
++        }
++    }
++    private val fallbackScope = ThreadLocal<FallbackScope?>()
++
++    /**
++     * The candidate nonce was allocated under InputDispatcher's lock and is
++     * never reused. KeyEvent.id remains bound evidence but is never the
++     * registry key or authority.
++     */
++    private fun publishAuthority(admissionToken: Long, value: KeyEvent,
++        physical: WonadPolicyKeyContainment.PhysicalPair,
++        origin: WonadPolicyKeyContainment.ClaimLineage,
++        pair: WonadPolicyKeyContainment.PairToken): Boolean {
++        val record = DeliveredAuthority(
++            admissionToken, value.id, physical, value.displayId, origin, pair)
++        return synchronized(deliveryLock) {
++            val call = admissionCall.get()
++            if (call == null || call.token != admissionToken || call.registered != null) {
++                return@synchronized false
++            }
++            if (admissionToken <= 0L || admissionToken in deliveries ||
++                deliveries.size >= MAX_PENDING_EVENTS) return@synchronized false
++            // Final successful publication step. All record construction and
++            // every fallible framework action happened before this mutation.
++            try {
++                call.registered = record
++                deliveries[admissionToken] = record
++                true
++            } catch (failure: Throwable) {
++                if (deliveries[admissionToken] === record) {
++                    deliveries.remove(admissionToken)
++                }
++                throw failure
++            }
++        }
++    }
++
++    private fun takeAuthority(token: Long, eventId: Int,
++        physical: WonadPolicyKeyContainment.PhysicalPair,
++        display: Int): DeliveredAuthority? =
++        synchronized(deliveryLock) {
++            if (token <= 0L) return@synchronized null
++            val retained = deliveries[token] ?: return@synchronized null
++            // A stale/malformed cleanup must not erase a later record. The
++            // private 63-bit nonce is primary; source-event facts are bound as
++            // independent corruption controls before removal.
++            if (retained.token != token || retained.eventId != eventId ||
++                retained.physical != physical || retained.display != display) {
++                return@synchronized null
++            }
++            deliveries.remove(token)
++        }
++
++    private fun takePrimitiveAuthority(token: Long, eventId: Int, device: Int,
++        keyCode: Int, downTime: Long, display: Int): DeliveredAuthority? =
++        synchronized(deliveryLock) {
++            if (token <= 0L) return@synchronized null
++            val retained = deliveries[token] ?: return@synchronized null
++            if (retained.token != token || retained.eventId != eventId ||
++                retained.physical.device != device || retained.physical.keyCode != keyCode ||
++                retained.physical.downTime != downTime || retained.display != display) {
++                return@synchronized null
++            }
++            deliveries.remove(token)
++        }
++
++    private fun role(value: Int) = when (value) {
++        ROLE_ORDINARY -> WonadPolicyKeyContainment.Role.ORDINARY
++        ROLE_APP_SWITCH -> WonadPolicyKeyContainment.Role.APP_SWITCH
++        ROLE_RECENT_APPS -> WonadPolicyKeyContainment.Role.RECENT_APPS
++        ROLE_ALL_APPS -> WonadPolicyKeyContainment.Role.ALL_APPS
++        ROLE_SYSTEM_ACTION -> WonadPolicyKeyContainment.Role.SYSTEM_ACTION
++        ROLE_META -> WonadPolicyKeyContainment.Role.META
++        ROLE_ALT -> WonadPolicyKeyContainment.Role.ALT
++        ROLE_TAB -> WonadPolicyKeyContainment.Role.TAB
++        ROLE_ESCAPE -> WonadPolicyKeyContainment.Role.ESCAPE
++        else -> throw IllegalArgumentException("Unknown policy role $value")
++    }
++
++    /** Capture the actual immutable claim object and attachment incarnation. */
++    private fun origin(display: Int): WonadPolicyKeyContainment.ClaimLineage? =
++        WonadUiBridge.currentShortcutClaimState(display)?.claim?.let(::origin)
++
++    private fun origin(claim: WonadUiBridge.ShortcutClaim) =
++        WonadPolicyKeyContainment.ClaimLineage(
++            claim,
++            claim.display,
++            claim.user,
++            claim.generation,
++            claim.incarnation,
++            claim.owner,
++        )
++
++    /** Fallible framework reads happen before the pure helper commit. */
++    private fun observe(context: Context, wm: WindowManagerInternal,
++        retained: WonadPolicyKeyContainment.ClaimLineage):
++        WonadPolicyKeyContainment.ObservedClaim {
++        val claim = retained.claim as? WonadUiBridge.ShortcutClaim
++        val status = if (claim == null || !WonadUiBridge.shortcutClaimCurrent(claim)) {
++            WonadPolicyKeyContainment.ClaimStatus.RETIRED
++        } else if (WonadInputBridge.policyClaimBlocked(context, wm, retained.display)) {
++            WonadPolicyKeyContainment.ClaimStatus.BLOCKED
++        } else {
++            WonadPolicyKeyContainment.ClaimStatus.HEALTHY
++        }
++        return WonadPolicyKeyContainment.ObservedClaim(retained, status)
++    }
++
++    private fun event(value: KeyEvent, display: Int = value.displayId) =
++        WonadPolicyKeyContainment.Event(
++        WonadPolicyKeyContainment.PhysicalPair(
++            value.deviceId,
++            value.keyCode,
++            value.downTime,
++        ),
++        display,
++        if (value.action == KeyEvent.ACTION_DOWN) WonadPolicyKeyContainment.Action.DOWN
++        else WonadPolicyKeyContainment.Action.UP,
++        value.repeatCount,
++        value.isCanceled,
++        value.isAltPressed,
++    )
++
++    private fun matchingFallback(focus: IBinder?, value: KeyEvent): FallbackScope? {
++        if (focus == null || (value.flags and KeyEvent.FLAG_FALLBACK) == 0) return null
++        val current = fallbackScope.get() ?: return null
++        val physical = event(value).physical
++        return current.takeIf {
++            it.focus === focus && it.fallbackEvent === value && it.physical == physical
++        }
++    }
++
++    private fun matchingUnhandled(focus: IBinder?, value: KeyEvent): UnhandledScope? {
++        if (focus == null) return null
++        val current = unhandledScope.get() ?: return null
++        val physical = event(value).physical
++        return current.takeIf {
++            it.trustedClaimed && it.focus === focus && it.sourceEvent === value &&
++                it.eventId == value.id &&
++                it.physical == physical
++        }
++    }
++
++    /**
++     * Read-only stock bookkeeping decision used before platform safety.
++     * This deliberately consults only lock-free WMS publications and pure
++     * pair state: no Settings/provider/WMS call may delay a safety chord.
++     */
++    @JvmStatic
++    fun allowStockBookkeeping(value: KeyEvent): Boolean = state.allowStockBookkeeping(
++        event(value),
++        origin(value.displayId),
++        WonadUiBridge.consumeInput(value.displayId),
++    )
++
++    /** Final route after platform safety, SecurePaste and fixed Wonad command priority. */
++    @JvmStatic
++    fun beforeStock(context: Context, wm: WindowManagerInternal,
++        focus: IBinder?, value: KeyEvent, role: Int): Decision {
++        val fallback = matchingFallback(focus, value)
++        val effectiveDisplay = fallback?.display ?: value.displayId
++        val observed = event(value, effectiveDisplay)
++        val current = fallback?.origin ?: origin(effectiveDisplay)
++        val request = state.prepareObservation(observed, current)
++        val claims = request.origins.map { observe(context, wm, it) }
++        val blocked = focus == null || fallback?.blocked == true ||
++            WonadInputBridge.policyClaimBlocked(context, wm, effectiveDisplay)
++        val raw = state.beforeStock(
++            observed,
++            role(role),
++            current,
++            blocked,
++            WonadPolicyKeyContainment.Observation(request, claims),
++        )
++        if (fallback == null && raw.application && focus == null) {
++            throw IllegalStateException("Application route without focus authority")
++        }
++        val nativeCompletion = fallback == null && raw.application
++        if (nativeCompletion) admissionCall.get()?.provisional = raw.pair
++        return Decision(raw, observed.physical, effectiveDisplay, nativeCompletion)
++    }
++
++    /**
++     * Final publication step immediately before KGC returns the private -3
++     * result.  All SecurePaste/framework work must already have completed.
++     * A collision or bounded-capacity failure converts this exact physical
++     * pair to drain and consumes it; it never produces an ownerless app
++     * dispatch.  The successful map insertion is the last operation on that
++     * path before returning to KGC.
++     */
++    @JvmStatic
++    fun commitNativeCompletion(wm: WindowManagerInternal, value: KeyEvent,
++        policyFlags: Int, admissionToken: Long, decision: Decision): Boolean {
++        val pair = decision.raw.pair
++        val exact = decision.nativeCompletion && decision.application &&
++            decision.matches(value) && pair != null
++        val origin = pair?.origin
++        if (exact && origin != null && publishAuthority(
++                admissionToken, value, event(value).physical, origin, pair)) {
++            return true
++        }
++        state.failApplicationPair(pair, event(value).physical)
++        WonadInputBridge.policyDrainContained(
++            wm,
++            value,
++            policyFlags,
++            (origin?.claim as? WonadUiBridge.ShortcutClaim),
++        )
++        return false
++    }
++
++    /** Drain only the original event; a mismatched Java decision fails closed. */
++    @JvmStatic
++    fun consume(wm: WindowManagerInternal, value: KeyEvent,
++        policyFlags: Int, decision: Decision): Boolean {
++        if (!decision.consume) return false
++        if (decision.matches(value)) {
++            WonadInputBridge.policyDrainContained(
++                wm,
++                value,
++                policyFlags,
++                (decision.raw.pair?.origin?.claim as? WonadUiBridge.ShortcutClaim),
++            )
++        }
++        return true
++    }
++
++    /**
++     * An application may return a claimed key as unhandled. It must not then
++     * re-enter Android global shortcuts. Only InputDispatcher's exact
++     * CONTINUE_WONAD_CLAIMED completion callback can install this synchronous
++     * scope; historical traffic on the same focus/display grants nothing.
++     */
++    @JvmStatic
++    fun bypassUnhandledStock(focus: IBinder?, value: KeyEvent): Boolean {
++        return matchingUnhandled(focus, value) != null ||
++            matchingFallback(focus, value) != null
++    }
++
++    /** Consume one exact native dispatch marker before default processing. */
++    @JvmStatic
++    fun beginUnhandled(wm: WindowManagerInternal, focus: IBinder?, value: KeyEvent,
++        wonadClaimed: Boolean, admissionToken: Long, admittedDisplay: Int): Any? {
++        val physical = event(value).physical
++        val retained = if (wonadClaimed) takeAuthority(
++            admissionToken, value.id, physical, admittedDisplay) else null
++        val target = if (wonadClaimed && focus != null) wm.getInputTargetInfo(focus) else null
++        val exactTarget = retained != null && target != null &&
++            target.displayId == retained.display && retained.display == admittedDisplay
++        val scope = UnhandledScope.create(
++            focus, value, value.id, physical, admittedDisplay, retained, exactTarget, wonadClaimed,
++            unhandledScope.get(), fallbackScope.get())
++        // A nested STOCK invocation must not inherit an outer claimed scope,
++        // even if collision-prone public IDs/physical facts happen to match.
++        fallbackScope.set(null)
++        unhandledScope.set(scope)
++        return scope
++    }
++
++    @JvmStatic
++    fun endUnhandled(value: Any?) {
++        if (value == null) return
++        val expected = value as? UnhandledScope
++            ?: throw IllegalArgumentException("Unknown unhandled scope")
++        check(unhandledScope.get() === expected) { "Unhandled scope order changed" }
++        unhandledScope.set(expected.previous)
++        fallbackScope.set(expected.previousFallback)
++    }
++
++    /** Primitive-only JNI cleanup avoids allocating another Java KeyEvent. */
++    @JvmStatic
++    fun finishHandled(admissionToken: Long, eventId: Int, device: Int, keyCode: Int,
++        downTime: Long, display: Int, abandoned: Boolean = false): Boolean {
++        val retained = takePrimitiveAuthority(
++            admissionToken, eventId, device, keyCode, downTime, display) ?: return false
++        if (abandoned) state.failApplicationPair(retained.pair, retained.physical)
++        return true
++    }
++
++    /**
++     * Begin exact fallback inheritance only after KeyCharacterMap returned a
++     * real fallback. A null result means this source event was never delivered
++     * under a claimed focus/display authority and must keep stock behavior.
++     */
++    @JvmStatic
++    fun beginFallback(focus: IBinder?, source: KeyEvent,
++        fallback: KeyEvent): Any? {
++        if (focus == null || (fallback.flags and KeyEvent.FLAG_FALLBACK) == 0) return null
++        val retained = matchingUnhandled(focus, source) ?: return null
++        val scope = FallbackScope.create(
++            focus, fallback, event(fallback).physical, retained.display, retained,
++            fallbackScope.get())
++        fallbackScope.set(scope)
++        return scope
++    }
++
++    /** Exact finally-only release; a mismatched stack is fail-stop, not aliasing. */
++    @JvmStatic
++    fun endFallback(value: Any?) {
++        if (value == null) return
++        val expected = value as? FallbackScope
++            ?: throw IllegalArgumentException("Unknown fallback scope")
++        check(fallbackScope.get() === expected) { "Fallback scope order changed" }
++        fallbackScope.set(expected.previous)
++    }
++
++    /** Prevent a derived fallback from re-entering PWM queue-time policy. */
++    @JvmStatic
++    fun bypassFallbackQueueing(focus: IBinder?, value: KeyEvent): Boolean {
++        return matchingFallback(focus, value) != null
++    }
++
++    @JvmStatic
++    fun onClaimContainmentChanged(claim: WonadUiBridge.ShortcutClaim, blocked: Boolean) =
++        state.onClaimContainmentChanged(origin(claim), blocked)
++
++    @JvmStatic
++    fun onClaimRetiring(claim: WonadUiBridge.ShortcutClaim) =
++        state.onClaimRetiring(origin(claim))
++
++    @JvmStatic
++    fun onClaimRetired(claim: WonadUiBridge.ShortcutClaim) =
++        state.onClaimRetired(origin(claim))
++
++    /** Synchronous bridge-side guard for a lifecycle state not yet unpublished. */
++    @JvmStatic
++    fun claimBlocked(claim: WonadUiBridge.ShortcutClaim): Boolean =
++        state.claimStatus(origin(claim))?.let {
++            it != WonadPolicyKeyContainment.ClaimStatus.HEALTHY
++        } ?: false
++
++    @JvmStatic fun removeDevice(device: Int): Boolean = state.removeDevice(device)
++    @JvmStatic fun mutationEpoch(): Long = state.mutationEpoch()
++    @JvmStatic fun reconcileDevices(present: IntArray, allKeysReleased: Boolean,
++        expectedEpoch: Long): Boolean =
++        state.reconcileDevices(present.toSet(), allKeysReleased, expectedEpoch)
++}

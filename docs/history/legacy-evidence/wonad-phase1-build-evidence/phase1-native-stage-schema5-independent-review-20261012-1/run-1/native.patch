@@ -1,0 +1,6 @@
+diff --git a/Entry.h b/Entry.h
+--- a/Entry.h
++++ b/Entry.h
+@@ -1 +1 @@
+-before
++after
