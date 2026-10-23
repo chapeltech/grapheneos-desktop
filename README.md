@@ -11,6 +11,12 @@ duplicating gigabytes. Deleting an old checkout does not delete a fork's links.
 Do not add `forks/` as ordinary files to this integration repository: use the
 lab's source export, which bundles the unique commits separately.
 
+Edit upstream changes in the small canonical Git worktrees under `projects/`
+(for example `projects/frameworks/base`), on `desktop/work`. They initially show
+only changed files; use Git sparse-checkout to expand the view when needed.
+Keep new commits in the fork, then deliberately update the lock before using them
+in a reproducible build. The lab export includes dirty fork worktrees as well as refs.
+
 Each preserved checkout has an `archive/...` branch. `desktop/emulator` and
 `desktop/pixel10` also preserve the previously selected development trees.
 The active lock now selects `desktop/source-stack`: the exact current declared
