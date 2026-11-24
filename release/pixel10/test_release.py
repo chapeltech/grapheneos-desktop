@@ -6,10 +6,11 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+import xml.etree.ElementTree as ET
 from zipfile import ZipFile
 
 import publish
-from source import configure
+from source import configure, git, settings_patch
 from verify import digest, inventory, ota_timestamp, signature
 
 BUILD = "2026112401"
@@ -27,6 +28,54 @@ class Checks(unittest.TestCase):
         config.write_text("https://releases.grapheneos.org/")
         configure(self.root)
         self.assertEqual(config.read_text(), publish.BASE)
+
+    def test_settings_patch_requires_reviewed_clean_source_and_only_opens_chooser(self):
+        app = self.root / "packages/apps/Settings"
+        xml = app / "res/xml/special_access.xml"
+        strings = app / "res/values/strings.xml"
+        xml.parent.mkdir(parents=True)
+        strings.parent.mkdir(parents=True)
+        xml.write_text("""<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <Preference>
+    </Preference>
+
+    <Preference
+        android:key="computer_control_automation"
+        />
+</PreferenceScreen>
+""")
+        # Preserve the exact patch context, with the large strings file omitted.
+        strings.write_text("""<resources>
+    <!-- [CHAR_LIMIT=60] Label for special access screen -->
+    <string name="special_access">Special app access</string>
+
+    <!-- Title for the See more preference item in Special app access settings [CHAR LIMIT=30] -->
+</resources>
+""")
+        git(app, "init", "-q")
+        git(app, "add", "res")
+        git(app, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "-qm", "Upstream Settings")
+        revision = git(app, "rev-parse", "HEAD")
+        manifest = ET.fromstring(f'<manifest><project path="packages/apps/Settings" revision="{revision}" /></manifest>')
+        with patch.dict("source.PINS", settings_revision=revision):
+            folder, args = settings_patch(self.root, manifest)
+            git(folder, "apply", *args)
+            with self.assertRaisesRegex(ValueError, "pristine"):
+                settings_patch(self.root, manifest)
+        with patch.dict("source.PINS", settings_revision="f" * 40):
+            with self.assertRaisesRegex(ValueError, "needs review"):
+                settings_patch(self.root, manifest)
+        ns = "{http://schemas.android.com/apk/res/android}"
+        row = next(p for p in ET.parse(xml).getroot() if p.get(ns + "key") == "external_desktop")
+        self.assertEqual([node.tag for node in row], ["intent"])
+        target = row[0]
+        self.assertEqual(target.attrib, {
+            ns + "action": "android.intent.action.MAIN",
+            ns + "targetPackage": "com.android.systemui",
+            ns + "targetClass": "com.android.wm.shell.externaldesktop.ExternalDesktopSettingsActivity",
+        })
+        self.assertEqual(list(target), [])
 
     def test_asset_limit_and_order(self):
         out = self.root/"parts"

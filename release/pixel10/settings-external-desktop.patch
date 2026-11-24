@@ -1,0 +1,32 @@
+diff --git a/res/values/strings.xml b/res/values/strings.xml
+index 55de29a..6235fbf 100644
+--- a/res/values/strings.xml
++++ b/res/values/strings.xml
+@@ -12128,4 +12128,7 @@
+     <!-- [CHAR_LIMIT=60] Label for special access screen -->
+     <string name="special_access">Special app access</string>
++    <!-- Special app access entry for authorizing an external window controller. -->
++    <string name="external_desktop_special_access_title">External desktop</string>
++    <string name="external_desktop_special_access_summary">Choose which app can manage windows on external displays</string>
+
+     <!-- Title for the See more preference item in Special app access settings [CHAR LIMIT=30] -->
+diff --git a/res/xml/special_access.xml b/res/xml/special_access.xml
+index f235824..577ee38 100644
+--- a/res/xml/special_access.xml
++++ b/res/xml/special_access.xml
+@@ -30,4 +30,15 @@
+     </Preference>
+
++    <Preference
++        android:key="external_desktop"
++        android:title="@string/external_desktop_special_access_title"
++        android:summary="@string/external_desktop_special_access_summary"
++        android:order="-1875">
++        <intent
++            android:action="android.intent.action.MAIN"
++            android:targetPackage="com.android.systemui"
++            android:targetClass="com.android.wm.shell.externaldesktop.ExternalDesktopSettingsActivity" />
++    </Preference>
++
+     <Preference
+         android:key="computer_control_automation"

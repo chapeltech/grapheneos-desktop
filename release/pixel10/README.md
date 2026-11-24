@@ -65,6 +65,9 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
    review vendor/firmware revisions against the previous release and the target
    phone. Never move an installed fleet backward. Build from a reviewed default
    branch commit. Dispatch **Build unsigned Pixel 10 release**.
+   If the manifest's Settings revision changed, review and rebase the small
+   `settings-external-desktop.patch` before updating its revision pin. It only
+   links Special app access to SystemUI; there is no Settings fork.
 2. Independently record the commit, build number and SHA256SUMS digest in the
    build summary. Transfer only the unsigned directory to the offline signer.
    The build tools inside otatools execute on the signer: do not sign artifacts

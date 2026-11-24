@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Select only commits whose parent matches the corresponding signed manifest project."""
+"""Select downstream platform changes on the authenticated release manifest."""
 import json
 from pathlib import Path
 import subprocess
@@ -13,6 +13,21 @@ def git(directory, *args):
     return subprocess.check_output(["git", "-C", directory, *args], text=True).strip()
 
 
+def settings_patch(root, projects):
+    """Prepare a resource-only patch against its reviewed, pristine upstream Settings."""
+    path = "packages/apps/Settings"
+    project = projects.find(f"project[@path='{path}']")
+    revision = PINS["settings_revision"]
+    dest = root / path
+    if project is None or project.get("revision") != revision:
+        raise ValueError("Settings patch needs review for this manifest")
+    if git(dest, "rev-parse", "HEAD") != revision or git(dest, "status", "--porcelain"):
+        raise ValueError("Settings is not the pristine upstream project")
+    args = ["--whitespace=error", str(HERE / "settings-external-desktop.patch")]
+    git(dest, "apply", "--check", *args)
+    return dest, args
+
+
 def prepare(root):
     manifest = root / ".repo/manifests"
     tag = PINS["release"]
@@ -23,6 +38,7 @@ def prepare(root):
             git(manifest, "rev-parse", tag + "^{commit}") != PINS["manifest"]):
         raise ValueError("release manifest differs from reviewed tag")
     projects = ET.fromstring(git(manifest, "show", "HEAD:default.xml"))
+    settings, patch = settings_patch(root, projects)
     for path, (name, commit) in PINS["forks"].items():
         project = projects.find(f"project[@path='{path}']")
         base = project.attrib["revision"]
@@ -32,6 +48,7 @@ def prepare(root):
         git(dest, "fetch", "--no-tags", "--depth=16", "https://github.com/chapeltech/" + name, commit)
         git(dest, "merge-base", "--is-ancestor", base, commit)
         git(dest, "checkout", "--detach", commit)
+    git(settings, "apply", *patch)
 
 
 def configure(root):

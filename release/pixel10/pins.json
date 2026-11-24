@@ -2,6 +2,7 @@
   "release": "2026111800",
   "manifest": "c2f57432b89dda12ec40f07768d3c3a75bde9634",
   "manifest_tag": "e5681d7438f52a75819d1f34f8d738fcaa54654c",
+  "settings_revision": "b6ef57550748eb6f54ebab4914c6e630a20fd07a",
   "update_url": "https://repo.chapeltech.uk/android/",
   "styx11": "fa0c7cb21168f49d33405a5a04bdf81ffdb4ae44",
   "forks": {

@@ -23,8 +23,9 @@ Unlocking **and relocking** erase data. Back up before starting.
    error; do not relock a partial flash. Check the boot key fingerprint on the
    handset before entering personal data.
 4. Install `controller.apk`, `styx.apk` and `xmonad.apk` from the release,
-   separately from the OS. Open the controller's OS settings button and
-   approve the installed controller in Android's External desktop chooser.
+   separately from the OS. Open **Settings → Apps → Special app access →
+   External desktop** (or use the controller's **OS permission settings**
+   button) and approve the installed controller.
    The OS ships with no approved app. Verify that the
    phone UI remains ordinary and that the external monitor accepts the selected
    window manager.
