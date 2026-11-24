@@ -21,6 +21,13 @@ class Checks(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
+    def test_configure_needs_no_controller_source_or_certificate(self):
+        config = self.root / "packages/apps/Updater/res/values/config.xml"
+        config.parent.mkdir(parents=True)
+        config.write_text("https://releases.grapheneos.org/")
+        configure(self.root)
+        self.assertEqual(config.read_text(), publish.BASE)
+
     def test_asset_limit_and_order(self):
         out = self.root/"parts"
         src = self.root/"src"

@@ -70,7 +70,7 @@ def verify(d, trust, build, commit, unsigned_hash):
         apk = d / (app + ".apk")
         output = sp.check_output(["apksigner", "verify", "--print-certs", apk], text=True)
         pins = re.findall(r"^Signer #\d+ certificate SHA-256 digest: (\w+)$", output, re.M)
-        require(pins == [digest(trust / (app + ".der"))], "wrong APK signer: " + app)
+        require(pins == [digest(trust / "desktop.der")], "wrong desktop APK signer: " + app)
         manifest = sp.check_output(["aapt2", "dump", "badging", apk], text=True)
         require(f"package: name='{pkg}' versionCode='{int(build)-2000000000}' versionName='0.1'" in manifest
                 and "application-debuggable" not in manifest, "wrong APK identity: " + app)

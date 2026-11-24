@@ -32,18 +32,19 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
   (executable) and `provider/native/arm64-v8a/` (provider and action).
   Produce them with the pinned client project's native recipes, retaining
   dependency source pins, licenses and toolchain record. Do not substitute
-  the emulator payload. Set CONTROLLER_SHA256, STYX_SHA256 and WM_SHA256 to
-  lowercase SHA-256 of the respective offline APK signing certificates in DER.
+  the emulator payload. Neither the OS nor the APK build needs a signing
+  certificate. The system owner chooses an installed controller after boot.
 * Generate fresh per-device release keys on a separate offline system following
   the selected upstream tag's key instructions (including the factory Ed25519
-  key); separately create the three APK keystores. Back up and test restoration
+  key); separately create one desktop APK keystore for the three companion apps.
+  Never use any OS key for the desktop APKs. Back up and test restoration
   offline before publishing. Never upload private keys, signed target-files,
   otatools, or keystores as public release assets.
 * On the publisher install gh, AWS CLI v2 with conditional S3 writes, Python 3.11+,
   aapt2, apksigner and the trusted matching `check_ota_package_signature` tool.
   Mount signed inputs read-only at SIGNED_ROOT/BUILD. PUBLIC_TRUST is an
   independently provisioned directory of **public** releasekey.x509.pem,
-  avb_pkmd.bin, controller.der, styx.der, xmonad.der, and allowed_signers
+  avb_pkmd.bin, desktop.der, and allowed_signers
   containing `pixel10 <factory SSH public key>`. Set OTA_BUCKET and an instance
   role limited to serving/writing the OTA objects and channel pointers (no
   deletes); protect/version these objects. Supply the protected values to both
@@ -70,7 +71,7 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
    from untrusted runners. From the pinned GrapheneOS checkout, run
    `bash /path/to/this/release/pixel10/offline-sign.sh` with BUILD_NUMBER,
    SOURCE_COMMIT, UNSIGNED, UNSIGNED_SUMS_SHA256, SIGNED (new absolute directory)
-   and ANDROID_KEYS (directory with controller.jks, styx.jks, xmonad.jks).
+   and DESKTOP_KEYSTORE (absolute path to the desktop-only keystore).
    Use the reviewed orchestration checkout at SOURCE_COMMIT. Transfer only the
    resulting signed directory back.
 3. Dispatch **Publish signed Pixel 10 release**, channel **beta**, with the

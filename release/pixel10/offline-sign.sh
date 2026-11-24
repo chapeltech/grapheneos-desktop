@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run only on the offline signer with the reviewed GrapheneOS tools checkout.
 set -eu -o pipefail
-: "${BUILD_NUMBER:?}" "${SOURCE_COMMIT:?}" "${UNSIGNED:?}" "${UNSIGNED_SUMS_SHA256:?}" "${SIGNED:?}" "${ANDROID_KEYS:?}"
+: "${BUILD_NUMBER:?}" "${SOURCE_COMMIT:?}" "${UNSIGNED:?}" "${UNSIGNED_SUMS_SHA256:?}" "${SIGNED:?}" "${DESKTOP_KEYSTORE:?}"
 [[ "$BUILD_NUMBER" =~ ^20[0-9]{8}$ && "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ && "$UNSIGNED_SUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
 [[ "$SIGNED" = /* && "$UNSIGNED" = /* && ! -e "$SIGNED" ]]
 root=$PWD
@@ -25,7 +25,17 @@ cp "$out/frankel-install-$BUILD_NUMBER.zip"{,.sig} "$out/frankel-ota_update-$BUI
 cp "$UNSIGNED"/{source-commit,build-number,native-inputs-sha256} "$SIGNED/"
 printf '%s\n' "$UNSIGNED_SUMS_SHA256" > "$SIGNED/unsigned-inputs-sha256"
 for name in controller styx xmonad; do
-    apksigner sign --ks "$ANDROID_KEYS/$name.jks" --out "$SIGNED/$name.apk" "$UNSIGNED/$name.apk"
+    apksigner sign --ks "$DESKTOP_KEYSTORE" --out "$SIGNED/$name.apk" "$UNSIGNED/$name.apk"
+done
+desktop_cert=$(apksigner verify --print-certs "$SIGNED/controller.apk" |
+    sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+[[ "$desktop_cert" =~ ^[a-f0-9]{64}$ ]]
+for cert in "$root"/keys/frankel/*.x509.pem; do
+    os_cert=$(openssl x509 -in "$cert" -outform DER | sha256sum)
+    test "${os_cert%% *}" != "$desktop_cert" || {
+        echo "The desktop APK signing key must not be an OS signing key." >&2
+        exit 1
+    }
 done
 cd "$SIGNED"
 sha256sum *.apk *.zip *.zip.sig source-commit build-number native-inputs-sha256 unsigned-inputs-sha256 > SHA256SUMS

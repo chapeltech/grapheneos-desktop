@@ -34,9 +34,6 @@ jobs:
       BUILD_ROOT: ${{ vars.BUILD_ROOT }}
       NATIVE_INPUTS: ${{ vars.NATIVE_INPUTS }}
       NATIVE_SHA256: ${{ vars.NATIVE_SHA256 }}
-      CONTROLLER_SHA256: ${{ vars.CONTROLLER_SHA256 }}
-      STYX_SHA256: ${{ vars.STYX_SHA256 }}
-      WM_SHA256: ${{ vars.WM_SHA256 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

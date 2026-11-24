@@ -8,6 +8,9 @@ android {
     compileSdk = 35
     defaultConfig { minSdk = 35 }
     buildFeatures { aidl = true }
+    aidlPackagedList.addAll(fileTree("src/main/aidl") { include("**/*.aidl") }.files.map {
+        it.relativeTo(file("src/main/aidl")).invariantSeparatorsPath
+    })
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

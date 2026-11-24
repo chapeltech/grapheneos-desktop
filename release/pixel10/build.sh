@@ -5,7 +5,6 @@ here=$(cd "$(dirname "$0")" && pwd)
 repo_dir=$(git -C "$here" rev-parse --show-toplevel)
 : "${BUILD_NUMBER:?}" "${BUILD_ROOT:?}" "${NATIVE_INPUTS:?}" "${NATIVE_SHA256:?}"
 [[ "$BUILD_ROOT" = /* && "$BUILD_NUMBER" =~ ^20[0-9]{8}$ && "$NATIVE_SHA256" =~ ^[a-f0-9]{64}$ ]]
-for pin in "$CONTROLLER_SHA256" "$STYX_SHA256" "$WM_SHA256"; do [[ "$pin" =~ ^[0-9a-f]{64}$ ]]; done
 export LC_ALL=C.UTF-8
 work="$BUILD_ROOT/$BUILD_NUMBER"
 mkdir -m 700 -- "$work"
@@ -28,7 +27,7 @@ git -C .repo/manifests fetch --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
 git -C .repo/manifests -c "gpg.ssh.allowedSignersFile=$repo_dir/android/platform/allowed_signers" verify-tag "$tag"
 test "$(git -C .repo/manifests rev-parse HEAD)" = "$(jq -r .manifest "$here/pins.json")"
 repo sync --fail-fast -j8
-python3 "$here/source.py" "$CONTROLLER_SHA256"
+python3 "$here/source.py"
 export OFFICIAL_BUILD=true BUILD_NUMBER
 source build/envsetup.sh
 yarn --cwd vendor/adevtool install --frozen-lockfile
@@ -37,7 +36,7 @@ lunch frankel-cur-user
 m -j72 vendorbootimage vendorkernelbootimage target-files-package otatools-package
 script/finalize.sh
 cp "releases/$BUILD_NUMBER/"{frankel-target_files,frankel-otatools}.zip "$work/unsigned/"
-python3 "$here/check-target.py" "$work/unsigned/frankel-target_files.zip" "$CONTROLLER_SHA256"
+python3 "$here/check-target.py" "$work/unsigned/frankel-target_files.zip"
 cd "$work"
 git init -q apps
 apps_sha=$(jq -r .styx11 "$here/pins.json")
@@ -48,8 +47,6 @@ ln -s "$work/os/frameworks/base/libs/WindowManager/Shell/externaldesktop/contrac
 code=$((10#$BUILD_NUMBER - 2000000000))
 gradle --offline --max-workers=72 -p apps/android -PdesktopSdkSource="$work/sdk" \
     -PwonadAbi=arm64-v8a -PwmEmulator=false -PdesktopVersionCode="$code" -PwmBuildNumber="$code" \
-    -PstyxBridgeSignerSha256="$STYX_SHA256" -PwmProviderSignerSha256="$WM_SHA256" \
-    -PwonadLaunchSignerSha256="$CONTROLLER_SHA256" -PwmControllerSignerSha256="$CONTROLLER_SHA256" \
     -PstyxNativeDir="$work/deps/styx/native" -PstyxAssetsDir="$work/deps/styx/assets" \
     -PwmXmonadNativeDir="$work/deps/xmonad/native" -PwmProviderNativeDir="$work/deps/provider/native" \
     :desktop-controller:assembleRelease :styx-desktop:assembleProductionRelease :wm-xmonad:assembleRelease
