@@ -1,0 +1,45 @@
+name: Publish signed Pixel 10 release
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Build number on offline-signed handoff
+        required: true
+      unsigned_digest:
+        description: SHA-256 of SHA256SUMS from the unsigned build job
+        required: true
+      channel:
+        type: choice
+        options: [beta, stable]
+        required: true
+      tested_from:
+        description: Stable only - predecessor tested on locked hardware
+      hardware_report:
+        description: Stable only - URL of the physical qualification report
+permissions:
+  contents: write
+concurrency:
+  group: frankel-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: [self-hosted, linux, x64, pixel10-publish]
+    environment: pixel10-${{ inputs.channel }}
+    env:
+      CHANNEL: ${{ inputs.channel }}
+      BUILD_NUMBER: ${{ inputs.build }}
+      UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
+      SIGNED_ROOT: ${{ vars.SIGNED_ROOT }}
+      PUBLIC_TRUST: ${{ vars.PUBLIC_TRUST }}
+      OTA_BUCKET: ${{ vars.OTA_BUCKET }}
+      TESTED_FROM_BUILD: ${{ inputs.tested_from }}
+      HARDWARE_REPORT: ${{ inputs.hardware_report }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify signed files and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 release/pixel10/publish.py

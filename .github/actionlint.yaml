@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    - pixel10-build
+    - pixel10-publish

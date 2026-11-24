@@ -1,0 +1,12 @@
+{
+  "release": "2026111800",
+  "manifest": "c2f57432b89dda12ec40f07768d3c3a75bde9634",
+  "manifest_tag": "e5681d7438f52a75819d1f34f8d738fcaa54654c",
+  "update_url": "https://repo.chapeltech.uk/android/",
+  "styx11": "ad3f6b7596ffe05bf99253c465ca7f6acbf692e1",
+  "forks": {
+    "frameworks/base": ["platform_frameworks_base", "50817f62a98842a12113f9d3caa2e6aafb532e41"],
+    "frameworks/native": ["platform_frameworks_native", "d6a6aafb39127fdc6ded41871c0dabd3b9c080e0"],
+    "packages/apps/Launcher3": ["platform_packages_apps_Launcher3", "1990f552f738c7ed0ae79cdf5aa6d5787a8d239d"]
+  }
+}
