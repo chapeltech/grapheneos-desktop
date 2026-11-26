@@ -171,9 +171,11 @@ class Checks(unittest.TestCase):
         (self.root/"avb_pkmd.bin").write_bytes(b"public")
         events = []
         pushed = []
+        predecessor = "2026112301"
+        prior_channel = f"{predecessor} 122 frankel beta\n".encode()
         class Response(io.BytesIO):
             status = 206
-            headers = {"Content-Range":"bytes 0-0/7"}
+            headers = {"Content-Range":"bytes 1-6/7"}
         sha = "a"*40
         def cli(args, **kwargs):
             query = " ".join(args)
@@ -192,16 +194,26 @@ class Checks(unittest.TestCase):
                 pushed.append(args[2])
                 return ""
             raise AssertionError(args)
-        for bad in ("draft","bytes",None):
+        for bad in ("draft", "incremental", "range", "range-bytes", "bytes", None):
             events.clear()
             pushed.clear()
-            def public(name, first=False):
-                if "incremental" in name: raise HTTPError(name,404,"absent",{},None)
-                return Response(b"wrong" if bad else b"payload")
+            def public(name, resume_from=None):
+                if name == f"frankel-incremental-{predecessor}-{BUILD}.zip":
+                    if bad == "incremental":
+                        return Response(b"unexpected incremental")
+                    raise HTTPError(name, 404, "absent", {}, None)
+                self.assertEqual(name, payload.name)
+                if resume_from is not None:
+                    self.assertEqual(resume_from, 1)
+                    reply = Response(b"broken" if bad == "range-bytes" else b"ayload")
+                    if bad == "range":
+                        reply.status = 200
+                    return reply
+                return Response(b"wrong" if bad == "bytes" else b"payload")
             with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="beta",SOURCE_COMMIT=sha,
                     SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                     patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
-                    patch.object(publish.pointers,"read",return_value=(None,None)), \
+                    patch.object(publish.pointers,"read",return_value=(prior_channel, sha)), \
                     patch.object(publish.pointers,"write",side_effect=lambda name, body, sha: events.append(name)), \
                     patch.object(publish.pointers,"wait_visible"), \
                     patch.object(publish,"visible",side_effect=public), patch.object(publish.sp,"check_output",side_effect=cli):
@@ -209,7 +221,11 @@ class Checks(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,"assets differ"): publish.publish()
                     self.assertNotIn("edit", pushed)
                     self.assertFalse(events)
-                elif bad:
+                elif bad in ("range", "range-bytes", "incremental"):
+                    with self.assertRaisesRegex(ValueError, "incorrect OTA resume range|must return HTTP 404"):
+                        publish.publish()
+                    self.assertFalse(events)
+                elif bad == "bytes":
                     with self.assertRaisesRegex(ValueError,"publicly served"): publish.publish()
                     self.assertNotIn("frankel-beta",events)
                 else:
@@ -220,10 +236,10 @@ class Checks(unittest.TestCase):
         name = f"frankel-ota_update-{BUILD}.zip"
         with patch.object(publish, "urlopen") as open_url:
             open_url.return_value.url = "https://release-assets.githubusercontent.com/asset"
-            publish.visible(name, True)
+            publish.visible(name, 300)
             request = open_url.call_args.args[0]
             self.assertEqual(request.full_url, f"{publish.PINS['ota_download_url']}frankel-0.1-{BUILD}/{name}")
-            self.assertEqual(request.headers["Range"], "bytes=0-0")
+            self.assertEqual(request.headers["Range"], "bytes=300-")
             publish.visible("frankel-beta")
             self.assertEqual(open_url.call_args.args[0].full_url, publish.BASE + "frankel-beta")
 
