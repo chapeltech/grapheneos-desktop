@@ -6,7 +6,7 @@ on:
         description: Build number on the prepared signing handoff
         required: true
       source_commit:
-        description: Full master commit recorded in the unsigned handoff
+        description: Full release-branch commit recorded in the unsigned handoff
         required: true
       unsigned_digest:
         description: SHA-256 of SHA256SUMS from the unsigned build job
@@ -55,48 +55,51 @@ jobs:
           fi
           printf 'Build: `%s`\n\nSource: `%s`\n\nUnsigned SHA256SUMS digest: `%s`\n' \
             "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256" >> "$GITHUB_STEP_SUMMARY"
-  sign:
+  release:
     needs: preflight
-    if: inputs.channel == 'beta' || inputs.channel == 'sign-only'
-    runs-on:
-      group: pixel10-signers
-      labels: pixel10-signer
-    environment: pixel10-sign
-    timeout-minutes: 360
-    steps:
-      - name: Request signing from the ChapelTech signer
-        shell: bash
-        env:
-          BUILD_NUMBER: ${{ inputs.build }}
-          SOURCE_COMMIT: ${{ inputs.source_commit }}
-          UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
-        run: |
-          sudo -n -u pixel10-sign /usr/local/libexec/pixel10/sign-release \
-            "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256"
-  publish:
-    needs: [preflight, sign]
-    if: >-
-      ${{ !cancelled() && needs.preflight.result == 'success' &&
-          (inputs.channel == 'stable' ||
-           (inputs.channel == 'beta' && needs.sign.result == 'success')) }}
     permissions:
       contents: write
-    runs-on: [self-hosted, linux, x64, pixel10-publish]
-    environment: pixel10-${{ inputs.channel }}
+    runs-on: ${{ vars.PIXEL10_GITHUB_RUNNER || 'ubuntu-24.04' }}
+    environment: ${{ inputs.channel == 'stable' && 'pixel10-stable' || 'pixel10-sign' }}
+    timeout-minutes: 360
     env:
+      RELEASE_KIND: os
       CHANNEL: ${{ inputs.channel }}
       BUILD_NUMBER: ${{ inputs.build }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
-      SIGNED_ROOT: ${{ vars.SIGNED_ROOT }}
-      PUBLIC_TRUST: ${{ vars.PUBLIC_TRUST }}
+      REF_PROTECTED: ${{ github.ref_protected }}
+      HOSTED_RUNNER: ${{ runner.environment }}
       TESTED_FROM_BUILD: ${{ inputs.tested_from }}
       HARDWARE_REPORT: ${{ inputs.hardware_report }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - name: Verify signing protection and fetch the approved handoff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PHASE: prepare
+        run: |
+          python3 release/pixel10/hosted_security.py
+          python3 release/pixel10/hosted_run.py
+      - name: Sign using protected GitHub environment secrets
+        if: inputs.channel != 'stable'
+        env:
+          RELEASE_PHASE: sign
+          PIXEL10_OS_KEYS_1: ${{ secrets.PIXEL10_OS_KEYS_1 }}
+          PIXEL10_OS_KEYS_2: ${{ secrets.PIXEL10_OS_KEYS_2 }}
+          PIXEL10_OS_KEYS_3: ${{ secrets.PIXEL10_OS_KEYS_3 }}
+          PIXEL10_APP_KEYS_1: ${{ secrets.PIXEL10_APP_KEYS_1 }}
+          PIXEL10_APP_KEYS_2: ${{ secrets.PIXEL10_APP_KEYS_2 }}
+        run: |
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          python3 release/pixel10/hosted_run.py
       - name: Verify signed files and publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 release/pixel10/publish.py
+          RELEASE_PHASE: verify-and-publish
+        run: |
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          python3 release/pixel10/hosted_run.py
