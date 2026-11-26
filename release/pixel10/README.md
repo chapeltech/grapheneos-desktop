@@ -51,8 +51,11 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
   deletes); protect/version these objects. Supply the protected values to both
   publication environments. No private signing keys on the build or publish runner.
 * Provision `android-ota.chapeltech.uk` as the HTTPS public origin for that
-  bucket (TLS and DNS). Deploy the reserved `/android/*` redirect from
-  chapeltech/pkgs' `netlify/_redirects` on its Netlify publication branch.
+  bucket (TLS and DNS). On the ChapelTech package site, deploy the rule
+  `/android/* https://android-ota.chapeltech.uk/:splat 302`. Add it to the
+  generated `_redirects` file via chapeltech/pkgs' `scripts/build-repositories`
+  and update that repo's output validation in lockstep. Do not hand-edit
+  the generated publication branch.
   The origin
   must support ranges, return **404**, not 403, for absent incrementals and
   channels, and serve channel files without caching. Never embed a transient

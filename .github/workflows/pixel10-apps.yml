@@ -47,9 +47,13 @@ jobs:
           bash -n release/pixel10/build-apps.sh
           python3 -m unittest discover -vs release/pixel10
           [[ "$OPERATION" == validate ]] && exit 0
-          [[ "$GITHUB_REF" == refs/heads/master && "$REF_PROTECTED" == true && "$BUILD_NUMBER" =~ ^20[0-9]{8}$ ]]
+          [[ "$GITHUB_REF" == refs/heads/master && "$REF_PROTECTED" == true ]] || {
+            echo 'Protect master before using the app release workflow.' >&2; exit 1;
+          }
+          [[ "$BUILD_NUMBER" =~ ^20[0-9]{8}$ ]]
           [[ "$OPERATION" == build ]] && exit 0
-          [[ "$SIGNING_ENABLED" == true && "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ && "$UNSIGNED_SUMS_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$SIGNING_ENABLED" == true ]] || { echo 'App signing has not been provisioned.' >&2; exit 1; }
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ && "$UNSIGNED_SUMS_SHA256" =~ ^[a-f0-9]{64}$ ]]
           test "$(git cat-file -t "$SOURCE_COMMIT")" = commit
           git merge-base --is-ancestor "$SOURCE_COMMIT" "$GITHUB_SHA"
           printf 'App build: `%s`\n\nSource: `%s`\n\nUnsigned SHA256SUMS digest: `%s`\n' \
