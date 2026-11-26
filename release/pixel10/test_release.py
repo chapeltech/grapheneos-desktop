@@ -132,7 +132,7 @@ class Checks(unittest.TestCase):
 
     def test_approval_gates(self):
         (self.root/BUILD).mkdir()
-        with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="stable",GITHUB_SHA="a"*40,
+        with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="stable",SOURCE_COMMIT="a"*40,
                 SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                 patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
                 patch.object(publish.sp,"check_output",side_effect=AssertionError("unexpected publication")):
@@ -167,7 +167,7 @@ class Checks(unittest.TestCase):
             def public(name, first=False):
                 if "incremental" in name: raise HTTPError(name,404,"absent",{},None)
                 return Response(b"wrong" if bad else b"payload")
-            with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="beta",GITHUB_SHA=sha,
+            with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="beta",SOURCE_COMMIT=sha,
                     SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                     patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
                     patch.object(publish,"visible",side_effect=public), patch.object(publish.sp,"check_output",side_effect=cli):

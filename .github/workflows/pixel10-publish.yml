@@ -1,34 +1,91 @@
-name: Publish signed Pixel 10 release
+name: Sign and publish Pixel 10 release
 on:
   workflow_dispatch:
     inputs:
       build:
-        description: Build number on offline-signed handoff
+        description: Build number on the prepared signing handoff
+        required: true
+      source_commit:
+        description: Full master commit recorded in the unsigned handoff
         required: true
       unsigned_digest:
         description: SHA-256 of SHA256SUMS from the unsigned build job
         required: true
       channel:
         type: choice
-        options: [beta, stable]
+        description: Sign without publishing, sign and publish Beta, or promote a signed Beta to Stable
+        options: [sign-only, beta, stable]
         required: true
       tested_from:
         description: Stable only - predecessor tested on locked hardware
       hardware_report:
         description: Stable only - URL of the physical qualification report
-permissions:
-  contents: write
+permissions: {}
 concurrency:
   group: frankel-publication
   cancel-in-progress: false
 jobs:
+  preflight:
+    if: github.repository == 'chapeltech/grapheneos-desktop' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify release request
+        shell: bash
+        env:
+          BUILD_NUMBER: ${{ inputs.build }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          SIGNING_ENABLED: ${{ vars.PIXEL10_SIGNING_ENABLED }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          test "$REF_PROTECTED" = true || { echo 'Protect master before using the release workflow.' >&2; exit 1; }
+          [[ "$BUILD_NUMBER" =~ ^20[0-9]{8}$ && "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ && "$UNSIGNED_SUMS_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          test "$(git cat-file -t "$SOURCE_COMMIT")" = commit
+          git merge-base --is-ancestor "$SOURCE_COMMIT" "$GITHUB_SHA"
+          if [[ "$CHANNEL" != stable ]]; then
+            test "$SIGNING_ENABLED" = true || { echo 'Pixel 10 automated signing has not been provisioned.' >&2; exit 1; }
+          fi
+          printf 'Build: `%s`\n\nSource: `%s`\n\nUnsigned SHA256SUMS digest: `%s`\n' \
+            "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256" >> "$GITHUB_STEP_SUMMARY"
+  sign:
+    needs: preflight
+    if: inputs.channel == 'beta' || inputs.channel == 'sign-only'
+    runs-on:
+      group: pixel10-signers
+      labels: pixel10-signer
+    environment: pixel10-sign
+    timeout-minutes: 360
+    steps:
+      - name: Request signing from the ChapelTech signer
+        shell: bash
+        env:
+          BUILD_NUMBER: ${{ inputs.build }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
+        run: |
+          sudo -n -u pixel10-sign /usr/local/libexec/pixel10/sign-release \
+            "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256"
   publish:
-    if: github.ref_name == github.event.repository.default_branch
+    needs: [preflight, sign]
+    if: >-
+      ${{ !cancelled() && needs.preflight.result == 'success' &&
+          (inputs.channel == 'stable' ||
+           (inputs.channel == 'beta' && needs.sign.result == 'success')) }}
+    permissions:
+      contents: write
     runs-on: [self-hosted, linux, x64, pixel10-publish]
     environment: pixel10-${{ inputs.channel }}
     env:
       CHANNEL: ${{ inputs.channel }}
       BUILD_NUMBER: ${{ inputs.build }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
       UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
       SIGNED_ROOT: ${{ vars.SIGNED_ROOT }}
       PUBLIC_TRUST: ${{ vars.PUBLIC_TRUST }}

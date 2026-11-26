@@ -64,7 +64,7 @@ def channel_text(channel):
 
 def publish():
     env = os.environ
-    build, channel, commit = env["BUILD_NUMBER"], env["CHANNEL"], env["GITHUB_SHA"]
+    build, channel, commit = env["BUILD_NUMBER"], env["CHANNEL"], env["SOURCE_COMMIT"]
     require(channel in ("beta", "stable") and re.fullmatch(r"20[0-9]{8}", build), "invalid dispatch")
     d = Path(env["SIGNED_ROOT"]) / build
     trust = Path(env["PUBLIC_TRUST"])

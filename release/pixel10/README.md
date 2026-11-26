@@ -10,10 +10,10 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
   runner can fetch them by SHA. Merge the workflows into the protected default
   branch. Preserve existing branch names. The phone release does not use the
   emulator lock, the legacy API-v3 signing pipeline, or workstation paths.
-* Register two dedicated self-hosted Linux runners (labels in the workflows).
+* Register dedicated build, signing and publishing Linux runners (labels in the workflows).
   Restrict runner groups to the named workflows on the protected branch; do
   not permit fork/PR workflows or reuse a public general-purpose runner.
-  Require reviewers on build, beta and stable environments, particularly
+  Require reviewers on build, signing and stable environments, particularly
   independent approval of the hardware report before stable publication.
 * Build runner: provision the [GrapheneOS build dependencies](https://grapheneos.org/build),
   repo, Node 24+, Yarn, Android SDK 35/build tools, JDK and AGP-compatible Gradle
@@ -39,6 +39,8 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
   Never use any OS key for the desktop APKs. Back up and test restoration
   offline before publishing. Never upload private keys, signed target-files,
   otatools, or keystores as public release assets.
+* Provision the separate signing host as described in [Signing with GitHub
+  Actions](SIGNING.md). No signing keys or key passwords belong in GitHub.
 * On the publisher install gh, AWS CLI v2 with conditional S3 writes, Python 3.11+,
   aapt2, apksigner and the trusted matching `check_ota_package_signature` tool.
   Mount signed inputs read-only at SIGNED_ROOT/BUILD. PUBLIC_TRUST is an
@@ -47,7 +49,7 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
   containing `pixel10 <factory SSH public key>`. Set OTA_BUCKET and an instance
   role limited to serving/writing the OTA objects and channel pointers (no
   deletes); protect/version these objects. Supply the protected values to both
-  publication environments. No private signing keys on either runner.
+  publication environments. No private signing keys on the build or publish runner.
 * Provision `android-ota.chapeltech.uk` as the HTTPS public origin for that
   bucket (TLS and DNS). Deploy the reserved `/android/*` redirect from
   chapeltech/pkgs' `netlify/_redirects` on its Netlify publication branch.
@@ -68,17 +70,14 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
    `settings-external-desktop.patch` before updating its revision pin. It only
    links Special app access to SystemUI; there is no Settings fork.
 2. Independently record the commit, build number and SHA256SUMS digest in the
-   build summary. Transfer only the unsigned directory to the offline signer.
-   The build tools inside otatools execute on the signer: do not sign artifacts
-   from untrusted runners. From the pinned GrapheneOS checkout, run
-   `bash /path/to/this/release/pixel10/offline-sign.sh` with BUILD_NUMBER,
-   SOURCE_COMMIT, UNSIGNED, UNSIGNED_SUMS_SHA256, SIGNED (new absolute directory)
-   and DESKTOP_KEYSTORE (absolute path to the desktop-only keystore).
-   Use the reviewed orchestration checkout at SOURCE_COMMIT. Transfer only the
-   resulting signed directory back.
-3. Dispatch **Publish signed Pixel 10 release**, channel **beta**, with the
-   original unsigned digest, at the same reviewed source commit. Reviewers
-   check source and inputs. The job checks both signed inventories, AVB key,
+   build summary. Stage the unsigned handoff and exact intake record on the
+   signing host; only accept outputs from the dedicated reviewed build. The
+   tools inside otatools execute on the signing host.
+3. From protected `master`, dispatch **Sign and publish Pixel 10 release** with
+   channel **beta**, the unsigned digest and its source commit. Review the build
+   identity in the preflight summary, then approve `pixel10-sign`. Choose
+   **sign-only** to test signing without touching GitHub Releases or OTA.
+   The publisher checks both signed inventories, AVB key,
    OTA signature, APK identity/pins and version, and the complete OTA served
    through the phone URL before updating the channel. A full OTA up to S3's
    single-PUT size limit is supported; GitHub assets at or above 2 GiB are

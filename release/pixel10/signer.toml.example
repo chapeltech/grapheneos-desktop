@@ -1,0 +1,10 @@
+# Install as /etc/chapeltech/pixel10-signer.toml; no secret values belong here.
+source_root = "/srv/pixel10/source"         # reviewed orchestration checkouts by source SHA
+graphene_root = "/srv/pixel10/grapheneos"   # pinned signer checkouts by manifest SHA
+intake_root = "/srv/pixel10/intake"         # admin-owned, one approval record per build number
+unsigned_root = "/srv/pixel10/unsigned"     # read-only handoffs from the trusted build host
+signed_root = "/srv/pixel10/signed"         # signer-owned, setgid publisher read group
+log_root = "/srv/pixel10/log"               # private to the signer account
+apk_keystore = "/srv/pixel10/keys/desktop.p12"
+apk_passfile = "/srv/pixel10/keys/desktop-password"
+tool_path = "/usr/bin:/bin:/opt/android/build-tools/35.0.0"
