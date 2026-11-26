@@ -4,10 +4,12 @@ import io
 import os
 from pathlib import Path
 import stat
+import shutil
 import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
+from zipfile import ZipFile
 
 import hosted_intake as intake
 import hosted_keys as keys
@@ -104,3 +106,17 @@ class Hosted(unittest.TestCase):
             reply["assets"][0]["digest"] = "sha256:" + "f" * 64
             with self.assertRaisesRegex(ValueError, "asset differs"):
                 runner.download(reply, self.root / "bad", lambda _: True, 1000)
+
+    def test_ota_tool_extraction_cannot_shadow_sdk_apksigner(self):
+        sdk = self.root / "sdk"
+        sdk.mkdir()
+        apksigner = sdk / "apksigner"
+        apksigner.touch(mode=0o700)
+        with ZipFile(self.root / "frankel-otatools.zip", "w") as ota_tools:
+            for name in ("check_ota_package_signature", "avbtool", "apksigner", "aapt2"):
+                ota_tools.writestr(f"bin/{name}", b"fixture")
+        with patch.dict(os.environ, {"PATH": str(sdk)}):
+            runner.run_verify_tools(self.root, self.root)
+            self.assertEqual(shutil.which("apksigner"), str(apksigner))
+            self.assertEqual({p.name for p in (self.root / "verify-tools").iterdir()},
+                             {"check_ota_package_signature", "avbtool"})
