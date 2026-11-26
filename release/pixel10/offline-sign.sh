@@ -36,7 +36,8 @@ cp "$out/frankel-install-$BUILD_NUMBER.zip"{,.sig} "$out/frankel-ota_update-$BUI
 cp "$UNSIGNED"/{source-commit,build-number,native-inputs-sha256} "$SIGNED/"
 printf '%s\n' "$UNSIGNED_SUMS_SHA256" > "$SIGNED/unsigned-inputs-sha256"
 for name in controller styx xmonad; do
-    apksigner sign --ks "$DESKTOP_KEYSTORE" "${apk_password[@]}" --out "$SIGNED/$name.apk" "$UNSIGNED/$name.apk"
+    apksigner sign --ks "$DESKTOP_KEYSTORE" "${apk_password[@]}" --v4-signing-enabled false \
+        --out "$SIGNED/$name.apk" "$UNSIGNED/$name.apk"
 done
 desktop_cert=$(apksigner verify --print-certs "$SIGNED/controller.apk" |
     sed -n 's/^Signer #1 certificate SHA-256 digest: //p')

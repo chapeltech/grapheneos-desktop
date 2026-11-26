@@ -44,7 +44,8 @@ def sign(config, build, commit, digest):
             for name, pkg in apps.APPS.items():
                 kind = "updater" if name == apps.UPDATER else "desktop"
                 sp.run(["apksigner", "sign", "--ks", config[kind + "_keystore"], "--ks-pass",
-                        "file:" + config[kind + "_passfile"], "--out", signed / name, unsigned / name],
+                        "file:" + config[kind + "_passfile"], "--v4-signing-enabled", "false",
+                        "--out", signed / name, unsigned / name],
                        check=True, stdin=sp.DEVNULL)
                 entries[name] = apps.apk_entry(signed / name, pkg, build, certs[kind])
             now = int(time.time())
