@@ -124,6 +124,16 @@ def verify_keyset(os_keys, work):
     hashes = json.loads((TRUST / "os-cert-sha256.json").read_text())
     actual = {role: apps.digest(os_keys / (role + ".x509.pem")) for role in keys.OS_ROLES}
     apps.require(actual == hashes, "unexpected OS certificate set")
+    for role in keys.OS_ROLES:
+        key = sp.check_output(["openssl", "pkey", "-inform", "DER", "-in", os_keys / (role + ".pk8"),
+                              "-pubout"], stdin=sp.DEVNULL)
+        cert = sp.check_output(["openssl", "x509", "-in", os_keys / (role + ".x509.pem"),
+                               "-pubkey", "-noout"], stdin=sp.DEVNULL)
+        apps.require(key == cert, f"OS key does not match its certificate: {role}")
+    factory = sp.check_output(["ssh-keygen", "-y", "-f", os_keys / "id_ed25519"],
+                              text=True, stdin=sp.DEVNULL).split()
+    expected = (TRUST / "allowed_signers").read_text().split()
+    apps.require(expected == ["pixel10"] + factory[:2], "unexpected factory signing key")
     derived = work / "derived-boot-key"
     sp.run(["avbtool", "extract_public_key", "--key", os_keys / "avb.pem", "--output", derived], check=True)
     apps.require(derived.read_bytes() == (TRUST / "avb_pkmd.bin").read_bytes() ==
