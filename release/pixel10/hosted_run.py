@@ -110,7 +110,9 @@ def run_verify_tools(work, target):
 
 def extract_verify_tools(target, tools):
     with zipfile.ZipFile(target / "frankel-otatools.zip") as archive:
-        # These are standalone Python executables from the verified handoff.
+        # These are standalone executables from the verified handoff. Keep the
+        # rest of its bin directory off PATH: signing/verification intentionally
+        # uses the SDK's apksigner and aapt2, not otatools' different versions.
         for name in ("check_ota_package_signature", "avbtool"):
             item = archive.getinfo("bin/" + name)
             apps.require(0 < item.file_size < 64 * 1024**2, "unexpected verification tool size")
