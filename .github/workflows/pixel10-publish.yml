@@ -13,8 +13,8 @@ on:
         required: true
       channel:
         type: choice
-        description: Sign without publishing, sign and publish Beta, or promote a signed Beta to Stable
-        options: [sign-only, beta, stable]
+        description: Disposable hosted rehearsal, sign without publishing, publish Beta, or promote Stable
+        options: [rehearse, sign-only, beta, stable]
         required: true
       tested_from:
         description: Stable only - predecessor tested on locked hardware
@@ -22,11 +22,48 @@ on:
         description: Stable only - URL of the physical qualification report
 permissions: {}
 concurrency:
-  group: frankel-publication
+  group: frankel-publication-${{ inputs.channel == 'rehearse' && 'rehearsal' || 'production' }}
   cancel-in-progress: false
 jobs:
+  rehearsal:
+    if: >-
+      github.repository == 'chapeltech/grapheneos-desktop' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.channel == 'rehearse' &&
+      (github.ref == 'refs/heads/dev/pixel10-github-signing' ||
+       github.ref == 'refs/heads/release/pixel10')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 120
+    env:
+      RELEASE_KIND: os
+      CHANNEL: sign-only
+      BUILD_NUMBER: ${{ inputs.build }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the private unsigned draft by approved build and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PHASE: prepare
+        run: |
+          [[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          git merge-base --is-ancestor "$SOURCE_COMMIT" "$GITHUB_SHA"
+          git diff --exit-code "$SOURCE_COMMIT" "$GITHUB_SHA" -- release/pixel10/OtaUrls.java release/pixel10/source.py release/pixel10/pins.json
+          python3 release/pixel10/hosted_run.py
+      - name: Sign with disposable keys and verify; never publish
+        env:
+          HOSTED_RUNNER: ${{ runner.environment }}
+        run: |
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          python3 release/pixel10/hosted_rehearsal.py
   preflight:
-    if: github.repository == 'chapeltech/grapheneos-desktop' && github.ref == 'refs/heads/release/pixel10'
+    if: github.repository == 'chapeltech/grapheneos-desktop' && github.ref == 'refs/heads/release/pixel10' && inputs.channel != 'rehearse'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
