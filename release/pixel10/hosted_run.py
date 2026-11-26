@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import runpy
 import shutil
+import stat
 import subprocess as sp
 import tempfile
 import xml.etree.ElementTree as ET
@@ -22,6 +23,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 REPO = f"repos/{security.REPO}"
 TRUST = HERE / "trust"
+OTA_VERIFY_BINARIES = ("check_ota_package_signature", "avbtool", "delta_generator")
 
 
 def gh(*argv):
@@ -105,21 +107,29 @@ def run_verify_tools(work, target):
     if not tools.exists():
         tools.mkdir(mode=0o700)
         extract_verify_tools(target, tools)
-    os.environ["PATH"] = str(tools) + os.pathsep + os.environ["PATH"]
+    os.environ["PATH"] = str(tools / "bin") + os.pathsep + os.environ["PATH"]
 
 
 def extract_verify_tools(target, tools):
+    (tools / "bin").mkdir(mode=0o700)
+    (tools / "lib64").mkdir(mode=0o700)
     with zipfile.ZipFile(target / "frankel-otatools.zip") as archive:
-        # These are standalone executables from the verified handoff. Keep the
-        # rest of its bin directory off PATH: signing/verification intentionally
-        # uses the SDK's apksigner and aapt2, not otatools' different versions.
-        for name in ("check_ota_package_signature", "avbtool"):
-            item = archive.getinfo("bin/" + name)
-            apps.require(0 < item.file_size < 64 * 1024**2, "unexpected verification tool size")
-            binary = tools / name
+        # The A/B verifier invokes delta_generator, which finds Android host
+        # libraries through $ORIGIN/../lib64. Keep the rest of otatools' bin
+        # directory off PATH so it can't shadow the SDK's apksigner or aapt2.
+        binaries = [archive.getinfo("bin/" + name) for name in OTA_VERIFY_BINARIES]
+        libraries = [item for item in archive.infolist()
+                     if re.fullmatch(r"lib64/lib[A-Za-z0-9_.+\-]+\.so(?:\.[A-Za-z0-9_.+\-]+)?", item.filename)]
+        apps.require(0 < len(libraries) <= 512 and
+                     sum(item.file_size for item in libraries) < 1024**3, "unexpected OTA verifier libraries")
+        for item in binaries + libraries:
+            kind = stat.S_IFMT(item.external_attr >> 16)
+            apps.require(kind in (0, stat.S_IFREG) and 0 < item.file_size < 128 * 1024**2,
+                         "unexpected verifier file type or size")
+            binary = tools / item.filename
             with archive.open(item) as source, binary.open("xb") as dest:
                 shutil.copyfileobj(source, dest)
-            binary.chmod(0o700)
+            binary.chmod(0o700 if item in binaries else 0o600)
 
 
 def verify_keyset(os_keys, work):

@@ -27,7 +27,7 @@ def main():
     hosted_run.run_verify_tools(work, target)
     with tempfile.TemporaryDirectory(prefix=".rehearsal-", dir=work) as tmp:
         generated = Path(tmp) / "disposable"
-        hosted_keygen.generate(generated, str(work / "verify-tools/avbtool"), "Disposable GitHub rehearsal", 4)
+        hosted_keygen.generate(generated, str(work / "verify-tools/bin/avbtool"), "Disposable GitHub rehearsal", 4)
         hosted_run.TRUST = generated / "trust"
         for kind in hosted_keys.FILES:
             os.environ.update(zip(hosted_keys.secret_names(kind), hosted_keys.pack(kind, generated / kind)))
