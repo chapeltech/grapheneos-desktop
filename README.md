@@ -17,14 +17,15 @@ replacing the normal phone interface.
    parts), its signature, and the signed checksums. Get the release public
    key and verified-boot fingerprint independently through your ChapelTech
    administrator, not from the download you are verifying. Follow the exact
-   [verification and flashing commands](release/pixel10/INSTALL.md). Use
+   [verification and flashing commands on the Pixel 10 release branch](https://github.com/chapeltech/grapheneos-desktop/blob/release/pixel10/release/pixel10/INSTALL.md). Use
    that ZIP's `flash-all` script, not the official GrapheneOS web installer.
    Stop on any flashing error; never relock a partial flash. Relock only
    after successfully flashing and verify the boot-key fingerprint on the
    phone before entering personal data.
 4. From [GitHub Releases](https://github.com/chapeltech/grapheneos-desktop/releases),
-   choose the newest Stable `desktop-apps-0.1-YYYYMMDDNN` release whose OS
-   range includes your build. Download `desktop-updates.apk` and compare
+   choose the newest `desktop-apps-0.1-YYYYMMDDNN` release whose OS range
+   includes your build. Choose Stable for normal use, or a compatible
+   prerelease if you are testing Beta. Download `desktop-updates.apk` and compare
    its APK signing certificate with the independently obtained ChapelTech
    **updater** fingerprint (`apksigner verify --print-certs desktop-updates.apk`)
    before installing. Open **ChapelTech Desktop Updates**, select **Allow
@@ -58,7 +59,7 @@ replacing the normal phone interface.
 
 This repository owns the privileged desktop extension, SDK, conformance tests,
 upstream manifest pins, build tools, and the Pixel 10 release and OTA pipelines.
-See the [release operator guide](release/pixel10/README.md).
+See the [release operator guide on the Pixel 10 release branch](https://github.com/chapeltech/grapheneos-desktop/blob/release/pixel10/release/pixel10/README.md).
 It does not own window-manager policy, StyX11, grsh or the Compose laboratory.
 
 Our Android project modifications are commits in independent Git repositories
