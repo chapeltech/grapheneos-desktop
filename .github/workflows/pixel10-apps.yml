@@ -30,6 +30,7 @@ jobs:
     if: github.repository == 'chapeltech/grapheneos-desktop'
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
     env:
       OPERATION: ${{ inputs.operation }}
@@ -68,6 +69,14 @@ jobs:
           printf 'App build: `%s`\n\nSource: `%s`\n\nUnsigned SHA256SUMS digest: `%s`\n' \
             "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256" >> "$GITHUB_STEP_SUMMARY"
         shell: bash
+      - name: Check that the workflow can read signing protection rules
+        if: inputs.operation == 'validate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          endpoint="repos/$GITHUB_REPOSITORY/environments/pixel10-sign"
+          gh api "$endpoint" --jq '{name, can_admins_bypass}'
+          gh api "$endpoint/deployment-branch-policies" --jq '[.branch_policies[] | {type, name}]'
   build:
     needs: validate
     if: inputs.operation == 'build'
@@ -95,6 +104,7 @@ jobs:
     needs: validate
     if: inputs.operation == 'sign-only' || inputs.operation == 'beta' || inputs.operation == 'stable'
     permissions:
+      actions: read
       contents: write
     runs-on: ${{ vars.PIXEL10_GITHUB_RUNNER || 'ubuntu-24.04' }}
     environment: ${{ inputs.operation == 'stable' && 'pixel10-stable' || 'pixel10-sign' }}

@@ -95,6 +95,7 @@ jobs:
   release:
     needs: preflight
     permissions:
+      actions: read
       contents: write
     runs-on: ${{ vars.PIXEL10_GITHUB_RUNNER || 'ubuntu-24.04' }}
     environment: ${{ inputs.channel == 'stable' && 'pixel10-stable' || 'pixel10-sign' }}
