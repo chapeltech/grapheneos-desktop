@@ -44,6 +44,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - run: |
+          if [[ "$OPERATION" == validate ]]; then
+            df -h "$RUNNER_TEMP" /tmp /dev/shm
+            for path in /usr/local/lib/android/sdk/ndk /usr/share/dotnet /opt/ghc /usr/local/swift; do
+              if [[ -d "$path" ]]; then du -sh "$path"; fi
+            done
+            if [[ -x "$ANDROID_HOME/build-tools/35.0.0/aapt2" && -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]]; then
+              echo 'Build-tools 35.0.0 present'
+            fi
+          fi
           bash -n release/pixel10/build-apps.sh
           python3 -m unittest discover -vs release/pixel10
           [[ "$OPERATION" == validate ]] && exit 0

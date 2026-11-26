@@ -31,6 +31,15 @@ required. The public OS and app OTA pointers live on the `ota` branch.
    Back up the keyset in encrypted form before a production phone uses it;
    GitHub environment secrets cannot be downloaded back through the API.
    Never generate replacement keys for an already-installed fleet.
+   For a new deployment, the generator creates both private directories and
+   the matching public trust together, refuses overwrite, and does not contact
+   GitHub:
+
+   ```sh
+   python3 release/pixel10/hosted_keygen.py "$SECURE_TMP/keys" --avbtool "$AVBTOOL"
+   ```
+
+   The resulting `os/` and `apps/` are private; `trust/` is public.
 4. Export public trust and add only the resulting public files to a reviewed PR
    targeting `release/pixel10`:
 
