@@ -1,14 +1,16 @@
 # Building and operating the Pixel 10 release
 
-Owner: chapeltech/grapheneos-desktop. Public updater base:
-`https://repo.chapeltech.uk/android/`. Version 0.1; tags are
+Owner: chapeltech/grapheneos-desktop. The phone reads channel metadata from
+[GitHub Raw](https://raw.githubusercontent.com/chapeltech/grapheneos-desktop/ota/)
+and downloads signed payloads from this repo's [GitHub Releases](https://github.com/chapeltech/grapheneos-desktop/releases).
+Version 0.1; tags are
 `frankel-0.1-YYYYMMDDNN`. These workflows do not run on PRs or flash phones.
 
 ## One-time operator setup
 
 * Publish the three fork commits and the StyX11 commit from `pins.json` so the
-  runner can fetch them by SHA. Merge the workflows into the protected default
-  branch. Preserve existing branch names. The phone release does not use the
+  runner can fetch them by SHA. Merge the workflows into protected
+  `release/pixel10`. The phone release does not use the
   emulator lock, the legacy API-v3 signing pipeline, or workstation paths.
 * Register dedicated build, signing and publishing Linux runners (labels in the workflows).
   Restrict runner groups to the named workflows on the protected branch; do
@@ -41,34 +43,27 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
   otatools, or keystores as public release assets.
 * Provision the separate signing host as described in [Signing with GitHub
   Actions](SIGNING.md). No signing keys or key passwords belong in GitHub.
-* On the publisher install gh, AWS CLI v2 with conditional S3 writes, Python 3.11+,
+* On the publisher install gh, Python 3.11+,
   aapt2, apksigner and the trusted matching `check_ota_package_signature` tool.
   Mount signed inputs read-only at SIGNED_ROOT/BUILD. PUBLIC_TRUST is an
   independently provisioned directory of **public** releasekey.x509.pem,
   avb_pkmd.bin, desktop.der, and allowed_signers
-  containing `pixel10 <factory SSH public key>`. Set OTA_BUCKET and an instance
-  role limited to serving/writing the OTA objects and channel pointers (no
-  deletes); protect/version these objects. Supply the protected values to both
+  containing `pixel10 <factory SSH public key>`. Supply the protected values to both
   publication environments. No private signing keys on the build or publish runner.
-* Provision `android-ota.chapeltech.uk` as the HTTPS public origin for that
-  bucket (TLS and DNS). On the ChapelTech package site, deploy the rule
-  `/android/* https://android-ota.chapeltech.uk/:splat 302`. Add it to the
-  generated `_redirects` file via chapeltech/pkgs' `scripts/build-repositories`
-  and update that repo's output validation in lockstep. Do not hand-edit
-  the generated publication branch.
-  The origin
-  must support ranges, return **404**, not 403, for absent incrementals and
-  channels, and serve channel files without caching. Never embed a transient
-  bucket hostname in phones. Publish commits with the existing ChapelTech
-  deployment process rather than overwriting unrelated package routes.
+* The publisher updates the metadata-only `ota` branch using GitHub's
+  Contents API and the previous blob SHA. Do not edit channel pointers by
+  hand or put binaries on that branch. No S3 bucket or ChapelTech redirect
+  is used. GitHub's final asset URL must serve verified bytes and support
+  HTTP Range; absent incrementals must return 404 so the updater can fall
+  back to the full OTA.
 
 ## Cut a release
 
 1. Choose a new ten-digit build number. Check the live frankel stable channel,
    verify its signed manifest, rebase the three fork deltas, update pins.json,
    review vendor/firmware revisions against the previous release and the target
-   phone. Never move an installed fleet backward. Build from a reviewed default
-   branch commit. Dispatch **Build unsigned Pixel 10 release**.
+   phone. Never move an installed fleet backward. Build from a reviewed
+   `release/pixel10` commit. Dispatch **Build unsigned Pixel 10 release**.
    If the manifest's Settings revision changed, review and rebase the small
    `settings-external-desktop.patch` before updating its revision pin. It only
    links Special app access to SystemUI; there is no Settings fork.
@@ -76,15 +71,15 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
    build summary. Stage the unsigned handoff and exact intake record on the
    signing host; only accept outputs from the dedicated reviewed build. The
    tools inside otatools execute on the signing host.
-3. From protected `master`, dispatch **Sign and publish Pixel 10 release** with
+3. From protected `release/pixel10`, dispatch **Sign and publish Pixel 10 release** with
    channel **beta**, the unsigned digest and its source commit. Review the build
    identity in the preflight summary, then approve `pixel10-sign`. Choose
    **sign-only** to test signing without touching GitHub Releases or OTA.
    The publisher checks both signed inventories, AVB key,
    OTA signature, APK identity/pins and version, and the complete OTA served
-   through the phone URL before updating the channel. A full OTA up to S3's
-   single-PUT size limit is supported; GitHub assets at or above 2 GiB are
-   split for manual download only. If interrupted mid-draft, inspect the draft
+   through the phone URL before updating the channel. A full OTA must fit
+   in one GitHub Release asset (strictly below 2 GiB); the factory ZIP can
+   be split for manual download. If interrupted mid-draft, inspect the draft
    and finish/remove it manually; never overwrite a published asset.
 4. See [installation and qualification](INSTALL.md). For the first stable
    release, install candidate N, relock and verify its boot key, install the
@@ -100,12 +95,12 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
 
 ## Desktop app releases (no OS rebuild)
 
-1. Install `apps.py`, `sign-release.py` and `sign-apps.py` as root-owned
+1. Install `apps.py`, `ota_publication.py`, `sign-release.py` and `sign-apps.py` as root-owned
    code on the existing dedicated signer; name the last executable
    `/usr/local/libexec/pixel10/sign-apps`. Give the runner sudo access only to
    that fixed command as `pixel10-sign`; do not add source checkout steps
    on the signing runner. Restrict the runner group and signing environment
-   to the OS and app workflows on protected `master`. Follow [SIGNING.md](SIGNING.md)
+   to the OS and app workflows on protected `release/pixel10`. Follow [SIGNING.md](SIGNING.md)
    for ownership, intake, permissions, and token separation.
 2. Configure `/etc/chapeltech/pixel10-app-signer.toml` using
    [app-signer.toml.example](app-signer.toml.example). Use the existing
@@ -123,9 +118,9 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
    input variables as the OS build. Pre-cache the updater's pinned Gradle
    dependencies, including its JVM test dependencies, for the offline build.
    Mount the signer output read-only as
-   `APP_SIGNED_ROOT` on the publisher. Allow the publisher to conditionally
-   write only the two additional `desktop-apps-{beta,stable}.json` keys; route
-   them through ChapelTech without caching. Only then enable
+   `APP_SIGNED_ROOT` on the publisher. The publisher also writes the two
+   `desktop-apps-{beta,stable}.json` pointers on GitHub's `ota` branch.
+   Only then enable
    `PIXEL10_APP_SIGNING_ENABLED=true`.
 4. Dispatch **Build, sign and publish Pixel 10 desktop apps** with operation
    **build**, a unique app build number, and the minimum/maximum tested OS

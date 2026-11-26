@@ -71,15 +71,6 @@ class AppsTests(unittest.TestCase):
         public = [old]
 
         def cli(argv, **_):
-            if argv[0] == "aws":
-                if "get-object" in argv:
-                    Path(argv[argv.index("--key") + 2]).write_bytes(old)
-                    return json.dumps({"ETag": '"old"'})
-                self.assertIn("--if-match", argv)
-                self.assertIn('"old"', argv)
-                calls.append(argv[argv.index("--key") + 1])
-                public[0] = (out / channel).read_bytes()
-                return ""
             value = " ".join(argv)
             if "--paginate" in argv and "/tags" in value:
                 return apps.tag(self.BUILD)
@@ -96,11 +87,17 @@ class AppsTests(unittest.TestCase):
                 super().__init__(b"corrupt" if broken else url.split("/")[-1].encode())
                 self.url = url
 
+        def write(name, body, sha):
+            self.assertEqual(sha, "a" * 40)
+            calls.append(name)
+            public[0] = body
+
         with patch.dict(os.environ, dict(BUILD_NUMBER=self.BUILD, SOURCE_COMMIT=commit, CHANNEL="beta",
                 APP_SIGNED_ROOT=str(self.root), PUBLIC_TRUST=str(self.root), UNSIGNED_SUMS_SHA256="b"*64,
                 OTA_BUCKET="test")), patch.object(apps, "verify_release", return_value={"apps": entries}), \
                 patch.object(apps, "public_or_missing", side_effect=lambda _: public[0]), \
-                patch.object(apps, "publicly", side_effect=lambda _: public[0]), \
+                patch.object(apps.pointers, "read", return_value=(old, "a" * 40)), \
+                patch.object(apps.pointers, "write", side_effect=write), \
                 patch.object(apps.sp, "check_output", side_effect=cli):
             with patch.object(apps, "urlopen", side_effect=lambda url, **_: Response(url, True)):
                 with self.assertRaisesRegex(ValueError, "download failed"):

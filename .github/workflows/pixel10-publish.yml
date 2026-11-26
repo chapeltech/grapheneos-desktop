@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preflight:
-    if: github.repository == 'chapeltech/grapheneos-desktop' && github.ref == 'refs/heads/master'
+    if: github.repository == 'chapeltech/grapheneos-desktop' && github.ref == 'refs/heads/release/pixel10'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -45,10 +45,11 @@ jobs:
           SIGNING_ENABLED: ${{ vars.PIXEL10_SIGNING_ENABLED }}
           CHANNEL: ${{ inputs.channel }}
         run: |
-          test "$REF_PROTECTED" = true || { echo 'Protect master before using the release workflow.' >&2; exit 1; }
+          test "$REF_PROTECTED" = true || { echo 'Protect release/pixel10 before using the release workflow.' >&2; exit 1; }
           [[ "$BUILD_NUMBER" =~ ^20[0-9]{8}$ && "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ && "$UNSIGNED_SUMS_SHA256" =~ ^[a-f0-9]{64}$ ]]
           test "$(git cat-file -t "$SOURCE_COMMIT")" = commit
           git merge-base --is-ancestor "$SOURCE_COMMIT" "$GITHUB_SHA"
+          git diff --exit-code "$SOURCE_COMMIT" "$GITHUB_SHA" -- release/pixel10/OtaUrls.java release/pixel10/source.py release/pixel10/pins.json
           if [[ "$CHANNEL" != stable ]]; then
             test "$SIGNING_ENABLED" = true || { echo 'Pixel 10 automated signing has not been provisioned.' >&2; exit 1; }
           fi
@@ -89,7 +90,6 @@ jobs:
       UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
       SIGNED_ROOT: ${{ vars.SIGNED_ROOT }}
       PUBLIC_TRUST: ${{ vars.PUBLIC_TRUST }}
-      OTA_BUCKET: ${{ vars.OTA_BUCKET }}
       TESTED_FROM_BUILD: ${{ inputs.tested_from }}
       HARDWARE_REPORT: ${{ inputs.hardware_report }}
     steps:

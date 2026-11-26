@@ -12,6 +12,7 @@ import time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
+import ota_publication as pointers
 
 APPS = {
     "controller.apk": "org.wonad.desktop",
@@ -23,8 +24,8 @@ UPDATER = "desktop-updates.apk"
 INPUTS = set(APPS) | {"build-number", "source-commit", "native-inputs-sha256", "os-range"}
 CATALOGS = {"desktop-apps-beta.json", "desktop-apps-stable.json"}
 ASSETS = set(APPS) | CATALOGS | {"app-provenance.json"}
-BASE = "https://repo.chapeltech.uk/android/"
-REPO = "chapeltech/grapheneos-desktop"
+BASE = pointers.RAW
+REPO = pointers.REPO
 BUILD = re.compile(r"20[0-9]{8}")
 HEX = re.compile(r"[a-f0-9]{64}")
 LIFETIME = 180 * 86400
@@ -179,14 +180,11 @@ def publish():
     root, trust = Path(env["APP_SIGNED_ROOT"]) / build, Path(env["PUBLIC_TRUST"])
     candidate = (root / name).read_bytes()
     payload = verify_release(root, trust, build, commit, env["UNSIGNED_SUMS_SHA256"], channel, int(time.time()))
-    old = public_or_missing(name)
+    old, old_sha = pointers.read(name)
     check_advance(old, channel, trust, candidate, build)
 
     def gh(*args):
         return sp.check_output(["gh", *args], text=True)
-
-    def aws(*args):
-        return sp.check_output(["aws", "s3api", *args, "--bucket", env["OTA_BUCKET"]], text=True)
 
     expected = {p.name: "sha256:" + digest(p) for p in root.iterdir()}
     def release_id():
@@ -237,17 +235,9 @@ def publish():
             require(response.url.startswith("https://") and
                     hashlib.file_digest(response, "sha256").hexdigest() == entry["sha256"],
                     "public APK download failed verification")
-    with tempfile.TemporaryDirectory() as temp:
-        cond = ["--if-none-match", "*"]
-        if old is not None:
-            prior = Path(temp) / name
-            result = json.loads(aws("get-object", "--key", name, str(prior)))
-            require(prior.read_bytes() == old, "public catalog differs from origin")
-            cond = ["--if-match", result["ETag"]]
-        if old != candidate:
-            aws("put-object", "--key", name, "--body", str(root / name),
-                "--content-type", "application/json", "--cache-control", "no-store", *cond)
-    require(publicly(name) == candidate, "published catalog not visible")
+    if old != candidate:
+        pointers.write(name, candidate, old_sha)
+    pointers.wait_visible(name, candidate, public_or_missing)
     if channel == "stable":
         gh("release", "edit", release, "--repo", REPO, "--prerelease=false", "--latest=false")
 

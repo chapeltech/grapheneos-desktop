@@ -3,7 +3,9 @@
   "manifest": "c2f57432b89dda12ec40f07768d3c3a75bde9634",
   "manifest_tag": "e5681d7438f52a75819d1f34f8d738fcaa54654c",
   "settings_revision": "b6ef57550748eb6f54ebab4914c6e630a20fd07a",
-  "update_url": "https://repo.chapeltech.uk/android/",
+  "updater_revision": "bfe6ad3f57b7bc4271244b2ab6069698b5975748",
+  "update_url": "https://raw.githubusercontent.com/chapeltech/grapheneos-desktop/ota/",
+  "ota_download_url": "https://github.com/chapeltech/grapheneos-desktop/releases/download/",
   "styx11": "f644a0372f1b3aabbd935645a1d1369b79c5ef6f",
   "forks": {
     "frameworks/base": ["platform_frameworks_base", "db028b7ac710ca68c5ef430c452092ffb91e4392"],

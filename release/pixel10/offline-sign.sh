@@ -13,6 +13,8 @@ test "$(cat "$UNSIGNED/source-commit")" = "$SOURCE_COMMIT"
 test "$(cat "$UNSIGNED/build-number")" = "$BUILD_NUMBER"
 test "$(git -C "$source_checkout" rev-parse HEAD)" = "$SOURCE_COMMIT"
 test "$(git -C .repo/manifests rev-parse HEAD)" = "$(jq -r .manifest "$pins")"
+test "$(jq -r .update_url "$pins")" = "https://raw.githubusercontent.com/chapeltech/grapheneos-desktop/ota/"
+python3 "$source_checkout/release/pixel10/check-target.py" "$UNSIGNED/frankel-target_files.zip"
 script_pin=$(git -C .repo/manifests show HEAD:default.xml | python3 -c 'import sys,xml.etree.ElementTree as E; print(E.parse(sys.stdin).find("project[@name=\"script\"]").get("revision"))')
 test "$(git -C script rev-parse HEAD)" = "$script_pin"
 test -z "$(git -C script status --porcelain)"
@@ -35,6 +37,7 @@ mkdir -m 700 "$SIGNED"
 cp "$out/frankel-install-$BUILD_NUMBER.zip"{,.sig} "$out/frankel-ota_update-$BUILD_NUMBER.zip" "$SIGNED/"
 cp "$UNSIGNED"/{source-commit,build-number,native-inputs-sha256} "$SIGNED/"
 printf '%s\n' "$UNSIGNED_SUMS_SHA256" > "$SIGNED/unsigned-inputs-sha256"
+jq -r .update_url "$pins" > "$SIGNED/ota-origin"
 for name in controller styx xmonad; do
     apksigner sign --ks "$DESKTOP_KEYSTORE" "${apk_password[@]}" --v4-signing-enabled false \
         --out "$SIGNED/$name.apk" "$UNSIGNED/$name.apk"
@@ -50,5 +53,5 @@ for cert in "$root"/keys/frankel/*.x509.pem; do
     }
 done
 cd "$SIGNED"
-sha256sum *.apk *.zip *.zip.sig source-commit build-number native-inputs-sha256 unsigned-inputs-sha256 > SHA256SUMS
+sha256sum *.apk *.zip *.zip.sig source-commit build-number native-inputs-sha256 unsigned-inputs-sha256 ota-origin > SHA256SUMS
 ssh-keygen -Y sign -f "$root/keys/frankel/id_ed25519" -n chapeltech-pixel10-release SHA256SUMS

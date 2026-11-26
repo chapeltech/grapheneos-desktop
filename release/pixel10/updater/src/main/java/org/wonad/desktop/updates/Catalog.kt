@@ -11,7 +11,7 @@ import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
 import javax.net.ssl.HttpsURLConnection
 
-internal const val BASE = "https://repo.chapeltech.uk/android/"
+internal const val BASE = "https://raw.githubusercontent.com/chapeltech/grapheneos-desktop/ota/"
 internal const val UPDATER = "org.wonad.desktop.updates"
 internal val PACKAGES = linkedMapOf(
     "controller.apk" to "org.wonad.desktop",
@@ -95,7 +95,7 @@ internal data class Catalog(val generation: Long, val hash: String, val apps: Li
 internal fun <T> https(url: String, github: Boolean, read: (InputStream) -> T): T {
     val allowed = if (github) setOf("github.com", "release-assets.githubusercontent.com",
         "objects.githubusercontent.com", "github-releases.githubusercontent.com")
-    else setOf("repo.chapeltech.uk", "android-ota.chapeltech.uk")
+    else setOf("raw.githubusercontent.com")
     var uri = URI(url)
     repeat(5) {
         require(uri.scheme == "https" && uri.host in allowed && uri.userInfo == null &&

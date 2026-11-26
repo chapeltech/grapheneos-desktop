@@ -2,6 +2,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -23,11 +24,30 @@ class Checks(unittest.TestCase):
         self.root = Path(self.tmp.name)
 
     def test_configure_needs_no_controller_source_or_certificate(self):
-        config = self.root / "packages/apps/Updater/res/values/config.xml"
+        updater = self.root / "packages/apps/Updater"
+        config = updater / "res/values/config.xml"
         config.parent.mkdir(parents=True)
-        config.write_text("https://releases.grapheneos.org/")
-        configure(self.root)
-        self.assertEqual(config.read_text(), publish.BASE)
+        config.write_text('<resources>\n    <string name="url" translatable="false">'
+                          'https://releases.grapheneos.org/</string>\n</resources>\n')
+        service = updater / "src/app/seamlessupdate/client/Service.java"
+        service.parent.mkdir(parents=True)
+        service.write_text('    private HttpsURLConnection fetchData(final Network network, final String path) throws IOException {\n'
+                           '        final URL url = new URL(getString(R.string.url) + path);\n'
+                           + 'fetchData(network, downloadFile)\n' * 5)
+        fixture = '<manifest><project path="packages/apps/Updater" revision="fixture"/></manifest>'
+        def git_fixture(path, *args):
+            if args[:1] == ("show",): return fixture
+            if args[:1] == ("status",): return ""
+            if args[:1] == ("rev-parse",): return "fixture"
+            raise AssertionError(args)
+        with patch.dict("source.PINS", updater_revision="fixture"), patch("source.git", side_effect=git_fixture):
+            configure(self.root)
+            self.assertRaises(ValueError, configure, self.root)
+        resources = {n.get("name"): n.text for n in ET.parse(config).getroot()}
+        self.assertEqual(resources, {"url": publish.BASE, "ota_download_url": publish.PINS["ota_download_url"]})
+        self.assertEqual(service.read_text().count("fetchPayload(network, downloadFile, targetIncremental)"), 5)
+        self.assertNotIn("fetchData(network, downloadFile)", service.read_text())
+        self.assertTrue(service.with_name("OtaUrls.java").is_file())
 
     def test_settings_patch_requires_reviewed_clean_source_and_only_opens_chooser(self):
         app = self.root / "packages/apps/Settings"
@@ -112,7 +132,7 @@ class Checks(unittest.TestCase):
     def test_signed_inventory(self):
         d = self.root/"handoff"
         d.mkdir()
-        names = ["build-number","source-commit","native-inputs-sha256","unsigned-inputs-sha256",
+        names = ["build-number","source-commit","native-inputs-sha256","unsigned-inputs-sha256","ota-origin",
                  "controller.apk","styx.apk","xmonad.apk",f"frankel-ota_update-{BUILD}.zip",
                  f"frankel-install-{BUILD}.zip",f"frankel-install-{BUILD}.zip.sig"]
         for name in names: (d/name).write_text(name)
@@ -132,9 +152,11 @@ class Checks(unittest.TestCase):
 
     def test_approval_gates(self):
         (self.root/BUILD).mkdir()
+        (self.root/BUILD/f"frankel-ota_update-{BUILD}.zip").touch()
         with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="stable",SOURCE_COMMIT="a"*40,
                 SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                 patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
+                patch.object(publish.pointers,"read",return_value=(None,None)), \
                 patch.object(publish,"visible",return_value=io.BytesIO(b"catalog")), \
                 patch.object(publish,"verify_catalog",return_value={"min_os":BUILD,"max_os":BUILD}), \
                 patch.object(publish.sp,"check_output",side_effect=AssertionError("unexpected publication")):
@@ -153,9 +175,6 @@ class Checks(unittest.TestCase):
             headers = {"Content-Range":"bytes 0-0/7"}
         sha = "a"*40
         def cli(args, **kwargs):
-            if args[0] == "aws":
-                events.append(args[args.index("--key")+1])
-                return ""
             query = " ".join(args)
             if "/tags --jq" in query: return ""
             if "/commits/" in query: return sha
@@ -172,10 +191,54 @@ class Checks(unittest.TestCase):
             with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="beta",SOURCE_COMMIT=sha,
                     SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                     patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
+                    patch.object(publish.pointers,"read",return_value=(None,None)), \
+                    patch.object(publish.pointers,"write",side_effect=lambda name, body, sha: events.append(name)), \
+                    patch.object(publish.pointers,"wait_visible"), \
                     patch.object(publish,"visible",side_effect=public), patch.object(publish.sp,"check_output",side_effect=cli):
                 if bad:
                     with self.assertRaisesRegex(ValueError,"publicly served"): publish.publish()
                     self.assertNotIn("frankel-beta",events)
                 else:
                     publish.publish()
-                    self.assertEqual(events,[payload.name,"frankel-beta"])
+                    self.assertEqual(events,["frankel-beta"])
+
+    def test_github_payload_url_and_range(self):
+        name = f"frankel-ota_update-{BUILD}.zip"
+        with patch.object(publish, "urlopen") as open_url:
+            open_url.return_value.url = "https://release-assets.githubusercontent.com/asset"
+            publish.visible(name, True)
+            request = open_url.call_args.args[0]
+            self.assertEqual(request.full_url, f"{publish.PINS['ota_download_url']}frankel-0.1-{BUILD}/{name}")
+            self.assertEqual(request.headers["Range"], "bytes=0-0")
+            publish.visible("frankel-beta")
+            self.assertEqual(open_url.call_args.args[0].full_url, publish.BASE + "frankel-beta")
+
+    @unittest.skipUnless(shutil.which("javac") and shutil.which("java"), "requires the Android build JDK")
+    def test_updater_url_builder(self):
+        harness = self.root / "CheckUrls.java"
+        harness.write_text(f"""
+package app.seamlessupdate.client;
+class CheckUrls {{
+    public static void main(String[] args) throws Exception {{
+        String raw = "{publish.BASE}", releases = "{publish.PINS["ota_download_url"]}";
+        String build = "{BUILD}", full = "frankel-ota_update-" + build + ".zip";
+        String delta = "frankel-incremental-2026112301-" + build + ".zip";
+        for (String file : new String[] {{full, delta}}) {{
+            if (!OtaUrls.payload(releases, build, file).toString().equals(
+                    releases + "frankel-0.1-" + build + "/" + file)) throw new AssertionError(file);
+        }}
+        if (!OtaUrls.metadata(raw, "frankel-beta").toString().equals(raw + "frankel-beta"))
+            throw new AssertionError();
+        try {{
+            OtaUrls.payload(releases, "2026112301", full);
+            throw new AssertionError("wrong target accepted");
+        }} catch (java.io.IOException expected) {{}}
+        try {{
+            OtaUrls.metadata(raw, "frankel-../../other");
+            throw new AssertionError("invalid channel accepted");
+        }} catch (java.io.IOException expected) {{}}
+    }}
+}}
+""")
+        subprocess.run(["javac", "-d", self.root, Path(publish.__file__).with_name("OtaUrls.java"), harness], check=True)
+        subprocess.run(["java", "-cp", self.root, "app.seamlessupdate.client.CheckUrls"], check=True)
