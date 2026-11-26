@@ -21,23 +21,24 @@ install package.
    ssh-keygen -Y verify -f allowed_signers -I pixel10 -n chapeltech-pixel10-release -s SHA256SUMS.sig < SHA256SUMS
    ```
 
-2. Download all files named in the verified `SHA256SUMS`. If only numbered
-   ZIP parts are listed as assets, download every part and concatenate them in
-   order. Set `build` to the ten-digit suffix of the release tag. In Bash:
+2. Download the factory ZIP and its `.sig` file. If the factory ZIP is split,
+   download every numbered factory part instead of the ZIP. You do **not**
+   need the OTA ZIP or the APKs to flash the OS. Set `build` to the ten-digit
+   suffix of the release tag. In Bash:
 
    ```bash
    build=YYYYMMDDNN   # replace with the exact release build number
    install="frankel-install-$build.zip"
-   ota="frankel-ota_update-$build.zip"
    (
-       set -e
+       set -eo pipefail
        export LC_ALL=C
-       for archive in "$install" "$ota"; do
-           if [[ ! -f "$archive" ]]; then
-               cat -- "$archive".part[0-9][0-9][0-9] > "$archive"
-           fi
-       done
-       sha256sum -c --strict SHA256SUMS
+       [[ "$build" =~ ^20[0-9]{8}$ ]]
+       if [[ ! -f "$install" ]]; then
+           cat -- "$install".part[0-9][0-9][0-9] > "$install.reassembled"
+           mv -- "$install.reassembled" "$install"
+       fi
+       awk -v name="$install" '$2 == name {print; found++} END {exit(found != 1)}' SHA256SUMS |
+           sha256sum -c --strict
        ssh-keygen -Y verify -f allowed_signers -I pixel10 -n 'factory images' -s "$install.sig" < "$install"
    )
    ```
@@ -54,7 +55,7 @@ install package.
    not the official web installer or emulator images. Stop on any flashing
    error; do not relock a partial flash. Check the boot key fingerprint on the
    handset before entering personal data.
-2. Follow the [repository README](../../README.md#install-on-a-pixel-10) to
+2. Follow the [repository README](https://github.com/chapeltech/grapheneos-desktop#install-on-a-pixel-10) to
    install the signed **ChapelTech Desktop Updates** APK from the separate
    desktop apps release and use it to install the three desktop apps.
    Open **Settings → Apps → Special app access →
