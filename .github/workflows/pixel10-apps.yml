@@ -96,7 +96,6 @@ jobs:
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
       REF_PROTECTED: ${{ github.ref_protected }}
-      HOSTED_RUNNER: ${{ runner.environment }}
       TESTED_FROM_BUILD: ${{ inputs.tested_from }}
       HARDWARE_REPORT: ${{ inputs.hardware_report }}
     steps:
@@ -106,6 +105,7 @@ jobs:
       - name: Verify signing protection and fetch the approved handoff
         env:
           GH_TOKEN: ${{ github.token }}
+          HOSTED_RUNNER: ${{ runner.environment }}
           RELEASE_PHASE: prepare
         run: |
           python3 release/pixel10/hosted_security.py
