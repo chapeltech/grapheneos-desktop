@@ -48,14 +48,14 @@ def newer(old, build, stamp, channel):
             and build > prev and stamp > int(when), "duplicate, downgrade or malformed channel")
 
 
-def visible(path, first_byte=False):
+def visible(path, resume_from=None):
     if path.endswith(".zip"):
-        match = re.fullmatch(r"frankel-(?:ota_update|incremental-[0-9]+)-(20[0-9]{8})\.zip", path)
+        match = re.fullmatch(r"frankel-(?:ota_update|incremental-20[0-9]{8})-(20[0-9]{8})\.zip", path)
         require(match is not None, "invalid OTA asset")
         url = f'{PINS["ota_download_url"]}frankel-0.1-{match[1]}/{path}'
     else:
         url = BASE + path
-    req = Request(url, headers={"Range":"bytes=0-0"} if first_byte else {})
+    req = Request(url, headers={"Range": f"bytes={resume_from}-"} if resume_from is not None else {})
     response = urlopen(req, timeout=120)
     require(response.url.startswith("https://"), "insecure redirect")
     return response
@@ -74,6 +74,34 @@ def public_metadata(name):
 def channel_text(channel):
     value = public_metadata("frankel-" + channel)
     return value.decode() if value is not None else None
+
+
+def verify_public_ota(ota, build, predecessor):
+    # These releases publish full OTAs only. The phone first asks for the
+    # exact predecessor-to-target delta, and falls back only on HTTP 404.
+    try:
+        with visible(f"frankel-incremental-{predecessor}-{build}.zip"):
+            raise ValueError("nonexistent incrementals must return HTTP 404")
+    except HTTPError as error:
+        if error.code != 404:
+            raise
+        error.close()
+
+    size = ota.stat().st_size
+    require(size > 1, "invalid OTA size")
+    offset = max(1, size - 64 * 1024)
+    with ota.open("rb") as source:
+        source.seek(offset)
+        expected = source.read()
+    # Match the updater's nonzero, open-ended resume request and confirm both
+    # the redirect's range metadata and the bytes the phone would append.
+    with visible(ota.name, offset) as response:
+        require(response.status == 206 and
+                response.headers["Content-Range"] == f"bytes {offset}-{size - 1}/{size}" and
+                response.read(len(expected) + 1) == expected,
+                "update host returned an incorrect OTA resume range")
+    with visible(ota.name) as response:
+        require(hashlib.file_digest(response, "sha256").hexdigest() == digest(ota), "bad publicly served OTA")
 
 
 def publish():
@@ -152,16 +180,11 @@ def publish():
         actual = json.loads(gh("api",f"repos/{{owner}}/{{repo}}/releases/tags/{tag}"))
         require(not actual["draft"], "candidate release is still a draft")
         check_assets(actual, expected)
-        try:
-            with visible("frankel-incremental-0-"+build+".zip"):
-                raise ValueError("nonexistent incrementals must return HTTP 404")
-        except HTTPError as e:
-            if e.code != 404: raise
-        with visible(ota.name, True) as r:
-            require(r.status == 206 and r.headers["Content-Range"] == f"bytes 0-0/{ota.stat().st_size}",
-                    "update host does not support correct byte ranges")
-        with visible(ota.name) as r:
-            require(hashlib.file_digest(r,"sha256").hexdigest() == digest(ota), "bad publicly served OTA")
+        # Use the prior live build when possible; the first release and
+        # retries still exercise a correctly shaped nonexistent delta.
+        predecessor = (previous if channel == "stable" else
+                       old.split()[0] if old is not None and old != release else "2000010100")
+        verify_public_ota(ota, build, predecessor)
         if old != release:
             pointers.write(key, release.encode(), old_sha)
         pointers.wait_visible(key, release.encode(), public_metadata)
