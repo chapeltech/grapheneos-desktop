@@ -7,10 +7,12 @@ import stat
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import hosted_intake as intake
 import hosted_keys as keys
 import hosted_security as security
+import hosted_run as runner
 
 
 class Hosted(unittest.TestCase):
@@ -86,3 +88,19 @@ class Hosted(unittest.TestCase):
         ):
             with self.assertRaises(ValueError):
                 security.check(security.REF, True, runner, env | {"can_admins_bypass": bypass}, rules)
+
+    def test_hosted_download_checks_github_asset_size_and_digest(self):
+        payload = b"reviewed signing asset bytes"
+        checksum = "sha256:" + hashlib.sha256(payload).hexdigest()
+        reply = {"assets": [{"name": "data.part000", "size": len(payload), "id": 123, "digest": checksum}]}
+
+        def deliver(_argv, *, stdout, check):
+            self.assertTrue(check)
+            stdout.write(payload)
+
+        with patch.object(runner.sp, "run", side_effect=deliver):
+            runner.download(reply, self.root / "ok", lambda _: True, 1000)
+            self.assertEqual((self.root / "ok/data.part000").read_bytes(), payload)
+            reply["assets"][0]["digest"] = "sha256:" + "f" * 64
+            with self.assertRaisesRegex(ValueError, "asset differs"):
+                runner.download(reply, self.root / "bad", lambda _: True, 1000)

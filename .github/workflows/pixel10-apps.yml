@@ -82,43 +82,47 @@ jobs:
           persist-credentials: false
       - run: bash release/pixel10/build-apps.sh
       - run: sha256sum "$APP_BUILD_ROOT/$BUILD_NUMBER/unsigned/SHA256SUMS" >> "$GITHUB_STEP_SUMMARY"
-  sign:
+  release:
     needs: validate
-    if: inputs.operation == 'sign-only' || inputs.operation == 'beta'
-    runs-on:
-      group: pixel10-signers
-      labels: pixel10-signer
-    environment: pixel10-sign
-    steps:
-      - name: Request signing from the ChapelTech signer
-        env:
-          BUILD_NUMBER: ${{ inputs.build }}
-          SOURCE_COMMIT: ${{ inputs.source_commit }}
-          UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
-        run: sudo -n -u pixel10-sign /usr/local/libexec/pixel10/sign-apps "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256"
-  publish:
-    needs: [validate, sign]
-    if: >-
-      ${{ !cancelled() && needs.validate.result == 'success' &&
-          (inputs.operation == 'stable' ||
-           (inputs.operation == 'beta' && needs.sign.result == 'success')) }}
+    if: inputs.operation == 'sign-only' || inputs.operation == 'beta' || inputs.operation == 'stable'
     permissions:
       contents: write
-    runs-on: [self-hosted, linux, x64, pixel10-publish]
-    environment: pixel10-${{ inputs.operation }}
+    runs-on: ${{ vars.PIXEL10_GITHUB_RUNNER || 'ubuntu-24.04' }}
+    environment: ${{ inputs.operation == 'stable' && 'pixel10-stable' || 'pixel10-sign' }}
     env:
+      RELEASE_KIND: apps
       CHANNEL: ${{ inputs.operation }}
       BUILD_NUMBER: ${{ inputs.build }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
-      APP_SIGNED_ROOT: ${{ vars.APP_SIGNED_ROOT }}
-      PUBLIC_TRUST: ${{ vars.PUBLIC_TRUST }}
+      REF_PROTECTED: ${{ github.ref_protected }}
+      HOSTED_RUNNER: ${{ runner.environment }}
       TESTED_FROM_BUILD: ${{ inputs.tested_from }}
       HARDWARE_REPORT: ${{ inputs.hardware_report }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - run: python3 release/pixel10/apps.py
+      - name: Verify signing protection and fetch the approved handoff
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_PHASE: prepare
+        run: |
+          python3 release/pixel10/hosted_security.py
+          python3 release/pixel10/hosted_run.py
+      - name: Sign using protected GitHub environment secrets
+        if: inputs.operation != 'stable'
+        env:
+          RELEASE_PHASE: sign
+          PIXEL10_APP_KEYS_1: ${{ secrets.PIXEL10_APP_KEYS_1 }}
+          PIXEL10_APP_KEYS_2: ${{ secrets.PIXEL10_APP_KEYS_2 }}
+        run: |
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          python3 release/pixel10/hosted_run.py
+      - name: Verify signed APKs and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PHASE: verify-and-publish
+        run: |
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          python3 release/pixel10/hosted_run.py
