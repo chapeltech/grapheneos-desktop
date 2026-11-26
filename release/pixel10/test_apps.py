@@ -23,11 +23,15 @@ class AppsTests(unittest.TestCase):
         self.pub = self.root / "app-catalog.pem"
         sp.run(["openssl", "genpkey", "-algorithm", "Ed25519", "-out", self.key], check=True)
         sp.run(["openssl", "pkey", "-in", self.key, "-pubout", "-out", self.pub], check=True)
+        for identity in ("desktop", "updater"):
+            (self.root / f"{identity}.der").write_bytes(identity.encode())
 
     def payload(self, channel="beta", build=BUILD):
         return {"format": 1, "channel": channel, "device": "frankel", "generation": int(build),
                 "build": build, "min_os": build, "max_os": "2026120100",
-                "issued": self.NOW, "expires": self.NOW + apps.LIFETIME}
+                "issued": self.NOW, "expires": self.NOW + apps.LIFETIME,
+                "apps": {name: {"certificate": apps.digest(self.root / (
+                    "updater.der" if name == apps.UPDATER else "desktop.der"))} for name in apps.APPS}}
 
     def test_signature_channel_expiry_and_generation(self):
         body = apps.sign_catalog(self.payload(), self.key)
@@ -69,6 +73,10 @@ class AppsTests(unittest.TestCase):
         old = apps.sign_catalog(self.payload(build="2026112500"), self.key)
         calls = []
         public = [old]
+        stable = self.payload(channel="stable", build="2026112400")
+        stable["apps"]["styx.apk"]["certificate"] = "0" * 64
+        mismatched = apps.sign_catalog(stable, self.key)
+        prior = {channel: (old, "a" * 40), apps.catalog_name("stable"): (None, None)}
 
         def cli(argv, **_):
             value = " ".join(argv)
@@ -96,9 +104,14 @@ class AppsTests(unittest.TestCase):
                 APP_SIGNED_ROOT=str(self.root), PUBLIC_TRUST=str(self.root), UNSIGNED_SUMS_SHA256="b"*64,
                 OTA_BUCKET="test")), patch.object(apps, "verify_release", return_value={"apps": entries}), \
                 patch.object(apps, "public_or_missing", side_effect=lambda _: public[0]), \
-                patch.object(apps.pointers, "read", return_value=(old, "a" * 40)), \
+                patch.object(apps.pointers, "read", side_effect=prior.__getitem__), \
                 patch.object(apps.pointers, "write", side_effect=write), \
                 patch.object(apps.sp, "check_output", side_effect=cli):
+            prior[apps.catalog_name("stable")] = (mismatched, "b" * 40)
+            with self.assertRaisesRegex(ValueError, "signing identity differs from stable build.*styx"):
+                apps.publish()
+            self.assertEqual(calls, [])
+            prior[apps.catalog_name("stable")] = (None, None)
             with patch.object(apps, "urlopen", side_effect=lambda url, **_: Response(url, True)):
                 with self.assertRaisesRegex(ValueError, "download failed"):
                     apps.publish()

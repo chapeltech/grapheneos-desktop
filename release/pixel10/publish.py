@@ -12,7 +12,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from source import PINS
-from verify import digest, require, verify
+from verify import OS_TRUST_ASSETS, digest, require, verify
 from apps import verify_catalog
 import ota_publication as pointers
 
@@ -40,12 +40,26 @@ def assets(d, out, limit=LIMIT):
     return files
 
 
-def newer(old, build, stamp, channel):
-    if old is None:
-        return
+def parse_channel(old, channel):
     prev, when, device, label = old.split()
-    require(device == "frankel" and label == channel and re.fullmatch("[0-9]{10}", prev)
-            and build > prev and stamp > int(when), "duplicate, downgrade or malformed channel")
+    require(device == "frankel" and label == channel and re.fullmatch("20[0-9]{8}", prev)
+            and re.fullmatch("[1-9][0-9]{0,15}", when), "malformed OS channel")
+    return prev, int(when)
+
+
+def newer(old, build, stamp, channel):
+    if old is not None:
+        prev, when = parse_channel(old, channel)
+        require(build > prev and stamp > when, "duplicate or downgrade")
+
+
+def verify_prior_trust(gh, previous, expected):
+    tag = "frankel-0.1-" + previous
+    record = json.loads(gh("api", "repos/{owner}/{repo}/releases/tags/" + tag))
+    require(record["tag_name"] == tag and not record["draft"], "previous OS release is not public")
+    for name, value in expected.items():
+        observed = [asset["digest"] for asset in record["assets"] if asset["name"] == name]
+        require(observed == [value], f"OS signing identity differs from {tag}: {name}")
 
 
 def visible(path, resume_from=None):
@@ -119,16 +133,25 @@ def publish():
         return sp.check_output(["gh", *args], text=True)
     old_bytes, old_sha = pointers.read(key)
     old = old_bytes.decode() if old_bytes is not None else None
+    release = f"{build} {stamp} frankel {channel}\n"
+    if old != release:
+        newer(old, build, stamp, channel)
+    other_channel = "stable" if channel == "beta" else "beta"
+    other_bytes, _ = pointers.read("frankel-" + other_channel)
+    trust_files = [trust / file for file in OS_TRUST_ASSETS]
+    expected_trust = {p.name: "sha256:" + digest(p) for p in trust_files}
+    prior = {parse_channel(value, label)[0] for label, value in (
+        (channel, old), (other_channel, other_bytes.decode() if other_bytes is not None else None),
+    ) if value is not None}
+    for previous in sorted(prior):
+        verify_prior_trust(gh, previous, expected_trust)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        release = f"{build} {stamp} frankel {channel}\n"
-        if old != release:
-            newer(old, build, stamp, channel)
         parts = tmp / "parts"
         parts.mkdir()
         pub = assets(d,parts)
         notes = Path(__file__).with_name("INSTALL.md")
-        attachments = [*pub, notes, trust / "avb_pkmd.bin"]
+        attachments = [*pub, notes, *trust_files]
 
         def expected_assets():
             return {p.name: "sha256:" + digest(p) for p in attachments}
@@ -172,8 +195,8 @@ def publish():
             report = env.get("HARDWARE_REPORT","")
             require(report.startswith("https://") and not any(c.isspace() for c in report),
                     "hardware qualification report URL required")
-            require(gh("release","view","frankel-0.1-"+previous,"--json","isDraft","--jq",".isDraft").strip()=="false",
-                    "predecessor was never released")
+            if previous not in prior:
+                verify_prior_trust(gh, previous, expected_trust)
             expected = expected_assets()
         require(gh("api",f"repos/{{owner}}/{{repo}}/commits/{tag}","--jq",".sha").strip()==commit,
                 "release tag source mismatch")

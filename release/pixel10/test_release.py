@@ -23,6 +23,12 @@ class Checks(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
+    def os_trust(self):
+        files = [self.root / name for name in publish.OS_TRUST_ASSETS]
+        for path in files:
+            path.write_bytes(path.name.encode())
+        return files
+
     def test_configure_needs_no_controller_source_or_certificate(self):
         updater = self.root / "packages/apps/Updater"
         config = updater / "res/values/config.xml"
@@ -153,6 +159,7 @@ class Checks(unittest.TestCase):
     def test_approval_gates(self):
         (self.root/BUILD).mkdir()
         (self.root/BUILD/f"frankel-ota_update-{BUILD}.zip").touch()
+        self.os_trust()
         with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="stable",SOURCE_COMMIT="a"*40,
                 SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                 patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
@@ -168,11 +175,13 @@ class Checks(unittest.TestCase):
         d.mkdir()
         payload = d/f"frankel-ota_update-{BUILD}.zip"
         payload.write_bytes(b"payload")
-        (self.root/"avb_pkmd.bin").write_bytes(b"public")
+        trust = self.os_trust()
         events = []
         pushed = []
         predecessor = "2026112301"
         prior_channel = f"{predecessor} 122 frankel beta\n".encode()
+        other_build = "2026112201"
+        other_channel = f"{other_build} 120 frankel stable\n".encode()
         class Response(io.BytesIO):
             status = 206
             headers = {"Content-Range":"bytes 1-6/7"}
@@ -182,8 +191,17 @@ class Checks(unittest.TestCase):
             if "/tags --jq" in query: return ""
             if "/commits/" in query: return sha
             if "/releases --jq" in query: return "42"
+            for previous in (predecessor, other_build):
+                tag = "frankel-0.1-" + previous
+                if query.endswith("/releases/tags/" + tag):
+                    inventory = [{"name": p.name, "digest": "sha256:" + digest(p)} for p in trust]
+                    if bad == "boot-key" and previous == predecessor:
+                        inventory = [entry for entry in inventory if entry["name"] != "avb_pkmd.bin"]
+                    if bad == "os-cert" and previous == other_build:
+                        inventory[1]["digest"] = "sha256:" + "0" * 64
+                    return json.dumps({"draft": False, "tag_name": tag, "assets": inventory})
             if "/releases/tags/" in query or "/releases/42" in query:
-                paths = [payload,self.root/"avb_pkmd.bin",Path(publish.__file__).with_name("INSTALL.md")]
+                paths = [payload,*trust,Path(publish.__file__).with_name("INSTALL.md")]
                 inventory = [{"name":p.name,"digest":"sha256:"+digest(p)} for p in paths]
                 draft = "/releases/42" in query
                 if draft and bad == "draft":
@@ -194,11 +212,12 @@ class Checks(unittest.TestCase):
                 pushed.append(args[2])
                 return ""
             raise AssertionError(args)
-        for bad in ("draft", "incremental", "range", "range-bytes", "bytes", None):
+        for bad in ("boot-key", "os-cert", "draft", "incremental", "range", "range-bytes", "bytes", None, "first"):
             events.clear()
             pushed.clear()
+            source = "2000010100" if bad == "first" else predecessor
             def public(name, resume_from=None):
-                if name == f"frankel-incremental-{predecessor}-{BUILD}.zip":
+                if name == f"frankel-incremental-{source}-{BUILD}.zip":
                     if bad == "incremental":
                         return Response(b"unexpected incremental")
                     raise HTTPError(name, 404, "absent", {}, None)
@@ -213,11 +232,19 @@ class Checks(unittest.TestCase):
             with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="beta",SOURCE_COMMIT=sha,
                     SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                     patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
-                    patch.object(publish.pointers,"read",return_value=(prior_channel, sha)), \
+                    patch.object(publish.pointers,"read",side_effect={
+                        "frankel-beta": (None, None) if bad == "first" else (prior_channel, sha),
+                        "frankel-stable": (None, None) if bad == "first" else (other_channel, "b" * 40),
+                    }.__getitem__), \
                     patch.object(publish.pointers,"write",side_effect=lambda name, body, sha: events.append(name)), \
                     patch.object(publish.pointers,"wait_visible"), \
                     patch.object(publish,"visible",side_effect=public), patch.object(publish.sp,"check_output",side_effect=cli):
-                if bad == "draft":
+                if bad in ("boot-key", "os-cert"):
+                    with self.assertRaisesRegex(ValueError, "OS signing identity differs"):
+                        publish.publish()
+                    self.assertFalse(pushed)
+                    self.assertFalse(events)
+                elif bad == "draft":
                     with self.assertRaisesRegex(ValueError,"assets differ"): publish.publish()
                     self.assertNotIn("edit", pushed)
                     self.assertFalse(events)

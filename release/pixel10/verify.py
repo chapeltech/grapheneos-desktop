@@ -9,6 +9,9 @@ import sys
 from zipfile import ZipFile
 from ota_publication import RAW
 
+OS_TRUST_ASSETS = ("avb_pkmd.bin", "os-cert-sha256.json")
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)

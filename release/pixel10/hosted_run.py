@@ -17,7 +17,7 @@ import hosted_intake as intake
 import hosted_keys as keys
 import hosted_security as security
 from source import PINS
-from verify import verify as verify_os
+from verify import OS_TRUST_ASSETS, verify as verify_os
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -191,7 +191,8 @@ def promotion(kind, work, build):
     release = exact_release(tag, False)
     folder = work / "signed" / build
     folder.parent.mkdir(mode=0o700)
-    download(release, folder, lambda n: n not in {"avb_pkmd.bin", "INSTALL.md"}, 8 * 1024**3)
+    extras = {*OS_TRUST_ASSETS, "INSTALL.md"} if kind == "os" else set()
+    download(release, folder, lambda n: n not in extras, 8 * 1024**3)
     if kind == "os":
         factory = folder / f"frankel-install-{build}.zip"
         parts = sorted(folder.glob(factory.name + ".part[0-9][0-9][0-9]"))

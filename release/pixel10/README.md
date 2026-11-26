@@ -43,7 +43,11 @@ Version 0.1; tags are
   hand or put binaries on that branch. No S3 bucket or ChapelTech redirect
   is used. GitHub's final asset URL must serve verified bytes and support
   HTTP Range; absent incrementals must return 404 so the updater can fall
-  back to the full OTA.
+  back to the full OTA. Publishers refuse to change the boot key, OS
+  signing certificate set, or the relevant app signing identities relative
+  to existing channels. Keep the first release's signing keys for updates.
+  Run one production OS or app release workflow at a time; both write to
+  the same metadata branch.
 
 ## Cut a release
 

@@ -23,7 +23,7 @@ on:
         description: Stable only - qualification report URL
 permissions: {}
 concurrency:
-  group: frankel-app-publication
+  group: ${{ (inputs.operation == 'validate' || inputs.operation == 'build') && 'frankel-app-preparation' || 'frankel-publication-production' }}
   cancel-in-progress: false
 jobs:
   validate:
