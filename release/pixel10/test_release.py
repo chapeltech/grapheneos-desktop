@@ -170,6 +170,7 @@ class Checks(unittest.TestCase):
         payload.write_bytes(b"payload")
         (self.root/"avb_pkmd.bin").write_bytes(b"public")
         events = []
+        pushed = []
         class Response(io.BytesIO):
             status = 206
             headers = {"Content-Range":"bytes 0-0/7"}
@@ -178,13 +179,22 @@ class Checks(unittest.TestCase):
             query = " ".join(args)
             if "/tags --jq" in query: return ""
             if "/commits/" in query: return sha
-            if "/releases/tags/" in query:
+            if "/releases --jq" in query: return "42"
+            if "/releases/tags/" in query or "/releases/42" in query:
                 paths = [payload,self.root/"avb_pkmd.bin",Path(publish.__file__).with_name("INSTALL.md")]
-                return json.dumps({"draft":False,"assets":[{"name":p.name,"digest":"sha256:"+digest(p)} for p in paths]})
-            if args[1]=="release": return ""
+                inventory = [{"name":p.name,"digest":"sha256:"+digest(p)} for p in paths]
+                draft = "/releases/42" in query
+                if draft and bad == "draft":
+                    inventory[0]["digest"] = "sha256:" + "0" * 64
+                return json.dumps({"draft":draft,"prerelease":True,"target_commitish":sha,
+                    "tag_name":"frankel-0.1-"+BUILD,"assets":inventory})
+            if args[1]=="release":
+                pushed.append(args[2])
+                return ""
             raise AssertionError(args)
-        for bad in (True,False):
+        for bad in ("draft","bytes",None):
             events.clear()
+            pushed.clear()
             def public(name, first=False):
                 if "incremental" in name: raise HTTPError(name,404,"absent",{},None)
                 return Response(b"wrong" if bad else b"payload")
@@ -195,7 +205,11 @@ class Checks(unittest.TestCase):
                     patch.object(publish.pointers,"write",side_effect=lambda name, body, sha: events.append(name)), \
                     patch.object(publish.pointers,"wait_visible"), \
                     patch.object(publish,"visible",side_effect=public), patch.object(publish.sp,"check_output",side_effect=cli):
-                if bad:
+                if bad == "draft":
+                    with self.assertRaisesRegex(ValueError,"assets differ"): publish.publish()
+                    self.assertNotIn("edit", pushed)
+                    self.assertFalse(events)
+                elif bad:
                     with self.assertRaisesRegex(ValueError,"publicly served"): publish.publish()
                     self.assertNotIn("frankel-beta",events)
                 else:

@@ -99,17 +99,40 @@ def publish():
         parts = tmp / "parts"
         parts.mkdir()
         pub = assets(d,parts)
+        notes = Path(__file__).with_name("INSTALL.md")
+        attachments = [*pub, notes, trust / "avb_pkmd.bin"]
+
+        def expected_assets():
+            return {p.name: "sha256:" + digest(p) for p in attachments}
+
+        def check_assets(record, expected):
+            require({a["name"]: a["digest"] for a in record["assets"]} == expected and
+                    len(record["assets"]) == len(expected), "GitHub assets differ from signed handoff")
+
         if channel == "beta":
             # Refuse old build numbers, even when they would still be newer than stable.
             tags = gh("api","--paginate","repos/{owner}/{repo}/tags","--jq",".[].name").splitlines()
             require(not any(t.startswith("frankel-0.1-") and t > tag for t in tags), "newer release exists")
-            if tag not in tags:
-                notes = Path(__file__).with_name("INSTALL.md")
+            def find_draft():
+                ids = gh("api", "--paginate", "repos/{owner}/{repo}/releases", "--jq",
+                         f'.[] | select(.tag_name == "{tag}" and .draft) | .id').splitlines()
+                require(len(ids) <= 1 and all(i.isdecimal() for i in ids), "ambiguous release draft")
+                return ids[0] if ids else None
+
+            draft = find_draft()
+            expected = expected_assets()
+            if tag not in tags and draft is None:
                 gh("release","create",tag,"--draft","--prerelease","--target",commit,
                    "--title","Pixel 10 candidate "+build,"--notes-file",str(notes))
-                gh("release","upload",tag,*map(str,pub),str(notes),str(trust/"avb_pkmd.bin"))
+                gh("release","upload",tag,*map(str,attachments))
+                draft = find_draft()
+                require(draft is not None, "new candidate draft not found")
+            if draft is not None:
+                record = json.loads(gh("api", "repos/{owner}/{repo}/releases/" + draft))
+                require(record["draft"] and record["prerelease"] and record["target_commitish"] == commit and
+                        record["tag_name"] == tag, "candidate draft has wrong identity")
+                check_assets(record, expected)
                 gh("release","edit",tag,"--draft=false")
-            # An existing tag can be retried only if its public artifacts match this handoff.
         else:
             with visible("desktop-apps-stable.json") as r:
                 app = verify_catalog(r.read(32769), trust / "app-catalog.pem", "stable", int(time.time()))
@@ -123,14 +146,12 @@ def publish():
                     "hardware qualification report URL required")
             require(gh("release","view","frankel-0.1-"+previous,"--json","isDraft","--jq",".isDraft").strip()=="false",
                     "predecessor was never released")
+            expected = expected_assets()
         require(gh("api",f"repos/{{owner}}/{{repo}}/commits/{tag}","--jq",".sha").strip()==commit,
                 "release tag source mismatch")
-        expected = {p.name:"sha256:"+digest(p) for p in pub}
-        expected["INSTALL.md"] = "sha256:"+digest(Path(__file__).with_name("INSTALL.md"))
-        expected["avb_pkmd.bin"] = "sha256:"+digest(trust/"avb_pkmd.bin")
         actual = json.loads(gh("api",f"repos/{{owner}}/{{repo}}/releases/tags/{tag}"))
-        require(not actual["draft"] and {a["name"]:a["digest"] for a in actual["assets"]} == expected,
-                "published release differs from offline handoff")
+        require(not actual["draft"], "candidate release is still a draft")
+        check_assets(actual, expected)
         try:
             with visible("frankel-incremental-0-"+build+".zip"):
                 raise ValueError("nonexistent incrementals must return HTTP 404")
