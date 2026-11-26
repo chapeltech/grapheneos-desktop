@@ -135,6 +135,8 @@ class Checks(unittest.TestCase):
         with patch.dict(os.environ,dict(BUILD_NUMBER=BUILD,CHANNEL="stable",SOURCE_COMMIT="a"*40,
                 SIGNED_ROOT=str(self.root),PUBLIC_TRUST=str(self.root),UNSIGNED_SUMS_SHA256="a"*64,OTA_BUCKET="bucket")), \
                 patch.object(publish,"verify",return_value=123), patch.object(publish,"channel_text",return_value=None), \
+                patch.object(publish,"visible",return_value=io.BytesIO(b"catalog")), \
+                patch.object(publish,"verify_catalog",return_value={"min_os":BUILD,"max_os":BUILD}), \
                 patch.object(publish.sp,"check_output",side_effect=AssertionError("unexpected publication")):
             with self.assertRaisesRegex(ValueError,"untested candidate"): publish.publish()
 

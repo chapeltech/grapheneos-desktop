@@ -7,11 +7,13 @@ from pathlib import Path
 import re
 import subprocess as sp
 import tempfile
+import time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from source import PINS
 from verify import digest, require, verify
+from apps import verify_catalog
 
 LIMIT = 2**31
 BASE = PINS["update_url"]
@@ -104,6 +106,10 @@ def publish():
                 gh("release","edit",tag,"--draft=false")
             # An existing tag can be retried only if its public artifacts match this handoff.
         else:
+            with visible("desktop-apps-stable.json") as r:
+                app = verify_catalog(r.read(32769), trust / "app-catalog.pem", "stable", int(time.time()))
+            require(app["min_os"] <= build <= app["max_os"],
+                    "there is no published Stable desktop app release for this OS build")
             require(channel_text("beta") == f"{build} {stamp} frankel beta\n", "untested candidate")
             previous = env["TESTED_FROM_BUILD"]
             require(re.fullmatch("20[0-9]{8}",previous) and previous < build, "need an older physical test build")

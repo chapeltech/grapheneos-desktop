@@ -54,8 +54,10 @@ install package.
    not the official web installer or emulator images. Stop on any flashing
    error; do not relock a partial flash. Check the boot key fingerprint on the
    handset before entering personal data.
-2. Install `controller.apk`, `styx.apk` and `xmonad.apk` from the release,
-   separately from the OS. Open **Settings → Apps → Special app access →
+2. Follow the [repository README](../../README.md#install-on-a-pixel-10) to
+   install the signed **ChapelTech Desktop Updates** APK from the separate
+   desktop apps release and use it to install the three desktop apps.
+   Open **Settings → Apps → Special app access →
    External desktop** (or use the controller's **OS permission settings**
    button) and approve the installed controller.
    The OS ships with no approved app. Connect a monitor and keyboard, and use
@@ -67,3 +69,10 @@ install package.
    relocking, reinstalling the APKs, or wiping the phone. A stable feed may
    not exist before the first hardware qualification. Report the build numbers
    and updater error if an update fails; do not unlock or downgrade.
+
+For physical qualification, test both paths separately: OS OTA with the
+desktop app versions held constant, and app-only OTA with the OS build held
+constant. Verify the locked boot key, phone data, StyX11 settings, controller
+approval, normal phone behavior, and the external desktop at 5120×1440.
+Record Android's observed behavior for unattended app updates and approval
+fallback, including a fresh install through Desktop Updates.

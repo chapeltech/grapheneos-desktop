@@ -90,5 +90,50 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
    external desktop on the 5120×1440 monitor. Record the exact builds, locked
    boot status, and results in a hardware report. Dispatch stable for the exact
    N+1 handoff with predecessor and report URL; only then approve promotion.
+   Promote a compatible, independently qualified Stable app release first;
+   the OS publisher verifies its signed catalog covers the OS being promoted.
    Future releases repeat the predecessor-to-candidate test. Never move a
    channel backward; release a higher-numbered fix or pause promotion.
+
+## Desktop app releases (no OS rebuild)
+
+1. Install `apps.py`, `sign-release.py` and `sign-apps.py` as root-owned
+   code on the existing dedicated signer; name the last executable
+   `/usr/local/libexec/pixel10/sign-apps`. Give the runner sudo access only to
+   that fixed command as `pixel10-sign`; do not add source checkout steps
+   on the signing runner. Restrict the runner group and signing environment
+   to the OS and app workflows on protected `master`. Follow [SIGNING.md](SIGNING.md)
+   for ownership, intake, permissions, and token separation.
+2. Configure `/etc/chapeltech/pixel10-app-signer.toml` using
+   [app-signer.toml.example](app-signer.toml.example). Use the existing
+   desktop APK signing key for the three apps, plus a distinct updater APK
+   signing key and an Ed25519 catalog key. Keep all private keys on the signer
+   and backed up offline. Export the two public APK certificates as
+   `desktop.der` and `updater.der` and the catalog public key as
+   `app-catalog.pem` to the independently provisioned public-trust directory.
+   Distribute both APK fingerprints independently for first install.
+3. Set `APP_CATALOG_PUBLIC_KEY` on the build environment to
+   `openssl pkey -pubin -in app-catalog.pem -outform DER | base64 -w0`;
+   set `DESKTOP_APK_SHA256` to the SHA-256 of `desktop.der`. Set
+   `APP_BUILD_ROOT` and `SDK_CHECKOUT` (a local framework/base Git repository
+   containing the exact pinned commit), and the same reviewed ARM64 native
+   input variables as the OS build. Pre-cache the updater's pinned Gradle
+   dependencies, including its JVM test dependencies, for the offline build.
+   Mount the signer output read-only as
+   `APP_SIGNED_ROOT` on the publisher. Allow the publisher to conditionally
+   write only the two additional `desktop-apps-{beta,stable}.json` keys; route
+   them through ChapelTech without caching. Only then enable
+   `PIXEL10_APP_SIGNING_ENABLED=true`.
+4. Dispatch **Build, sign and publish Pixel 10 desktop apps** with operation
+   **build**, a unique app build number, and the minimum/maximum tested OS
+   builds, inclusive. Stage the exact unsigned app handoff and its
+   `SOURCE_COMMIT SHA256SUMS_DIGEST` intake record separately from the OS.
+   Run **sign-only** or **beta**. The publisher verifies the public tagged
+   assets before advancing the signed Beta catalog. An interrupted draft
+   with missing assets needs operator review; never overwrite public assets.
+5. After testing the app-only update from a published Beta predecessor on
+   hardware, run **stable** with its predecessor and qualification report.
+   Stable app releases do not become GitHub's latest **OS** release. Catalogs
+   expire 180 days after signing; cut a higher app release before expiry,
+   even if the sources have not changed. Publish a higher app build if the
+   compatible OS range changes. Phones never downgrade when switching channels.

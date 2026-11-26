@@ -41,7 +41,7 @@ def open_input(directory, name):
     return stream
 
 
-def stage_unsigned(source, staged, build, commit, digest):
+def stage_unsigned(source, staged, build, commit, digest, expected=UNSIGNED_FILES):
     """Snapshot only the approved bytes before starting any signing tools."""
     fd = os.open(source, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
@@ -54,10 +54,10 @@ def stage_unsigned(source, staged, build, commit, digest):
             match = ROW.fullmatch(line)
             require(match is not None, "invalid unsigned inventory row")
             checksum, name = (part.decode("ascii") for part in match.groups())
-            require(name in UNSIGNED_FILES and name not in entries, "unexpected unsigned inventory path")
+            require(name in expected and name not in entries, "unexpected unsigned inventory path")
             entries[name] = checksum
-        require(entries.keys() == UNSIGNED_FILES, "incomplete unsigned inventory")
-        require(set(os.listdir(fd)) == UNSIGNED_FILES | {"SHA256SUMS"},
+        require(entries.keys() == expected, "incomplete unsigned inventory")
+        require(set(os.listdir(fd)) == expected | {"SHA256SUMS"},
                 "unsigned directory differs from its inventory")
         for name, checksum in entries.items():
             with open_input(fd, name) as src, (staged / name).open("xb") as dst:

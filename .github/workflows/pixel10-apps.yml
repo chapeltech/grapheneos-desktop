@@ -1,0 +1,121 @@
+name: Build, sign and publish Pixel 10 desktop apps
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Build, sign, publish Beta, promote to Stable, or run checks only
+        type: choice
+        options: [validate, build, sign-only, beta, stable]
+        default: validate
+      build:
+        description: App build number (YYYYMMDDNN)
+      min_os:
+        description: Oldest compatible Pixel 10 OS build (build only)
+      max_os:
+        description: Newest compatible Pixel 10 OS build (build only)
+      source_commit:
+        description: Source commit in the unsigned handoff (sign and publish)
+      unsigned_digest:
+        description: SHA-256 of the unsigned SHA256SUMS (sign and publish)
+      tested_from:
+        description: Stable only - predecessor app build tested on a relocked Pixel 10
+      hardware_report:
+        description: Stable only - qualification report URL
+permissions: {}
+concurrency:
+  group: frankel-app-publication
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.repository == 'chapeltech/grapheneos-desktop'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      OPERATION: ${{ inputs.operation }}
+      BUILD_NUMBER: ${{ inputs.build }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
+      REF_PROTECTED: ${{ github.ref_protected }}
+      SIGNING_ENABLED: ${{ vars.PIXEL10_APP_SIGNING_ENABLED }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: |
+          bash -n release/pixel10/build-apps.sh
+          python3 -m unittest discover -vs release/pixel10
+          [[ "$OPERATION" == validate ]] && exit 0
+          [[ "$GITHUB_REF" == refs/heads/master && "$REF_PROTECTED" == true && "$BUILD_NUMBER" =~ ^20[0-9]{8}$ ]]
+          [[ "$OPERATION" == build ]] && exit 0
+          [[ "$SIGNING_ENABLED" == true && "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ && "$UNSIGNED_SUMS_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          test "$(git cat-file -t "$SOURCE_COMMIT")" = commit
+          git merge-base --is-ancestor "$SOURCE_COMMIT" "$GITHUB_SHA"
+          printf 'App build: `%s`\n\nSource: `%s`\n\nUnsigned SHA256SUMS digest: `%s`\n' \
+            "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+  build:
+    needs: validate
+    if: inputs.operation == 'build'
+    runs-on: [self-hosted, linux, x64, pixel10-build]
+    environment: pixel10-build
+    permissions:
+      contents: read
+    env:
+      BUILD_NUMBER: ${{ inputs.build }}
+      MIN_OS: ${{ inputs.min_os }}
+      MAX_OS: ${{ inputs.max_os }}
+      APP_BUILD_ROOT: ${{ vars.APP_BUILD_ROOT }}
+      NATIVE_INPUTS: ${{ vars.NATIVE_INPUTS }}
+      NATIVE_SHA256: ${{ vars.NATIVE_SHA256 }}
+      SDK_CHECKOUT: ${{ vars.SDK_CHECKOUT }}
+      CATALOG_KEY: ${{ vars.APP_CATALOG_PUBLIC_KEY }}
+      DESKTOP_CERT: ${{ vars.DESKTOP_APK_SHA256 }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: bash release/pixel10/build-apps.sh
+      - run: sha256sum "$APP_BUILD_ROOT/$BUILD_NUMBER/unsigned/SHA256SUMS" >> "$GITHUB_STEP_SUMMARY"
+  sign:
+    needs: validate
+    if: inputs.operation == 'sign-only' || inputs.operation == 'beta'
+    runs-on:
+      group: pixel10-signers
+      labels: pixel10-signer
+    environment: pixel10-sign
+    steps:
+      - name: Request signing from the ChapelTech signer
+        env:
+          BUILD_NUMBER: ${{ inputs.build }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
+        run: sudo -n -u pixel10-sign /usr/local/libexec/pixel10/sign-apps "$BUILD_NUMBER" "$SOURCE_COMMIT" "$UNSIGNED_SUMS_SHA256"
+  publish:
+    needs: [validate, sign]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' &&
+          (inputs.operation == 'stable' ||
+           (inputs.operation == 'beta' && needs.sign.result == 'success')) }}
+    permissions:
+      contents: write
+    runs-on: [self-hosted, linux, x64, pixel10-publish]
+    environment: pixel10-${{ inputs.operation }}
+    env:
+      CHANNEL: ${{ inputs.operation }}
+      BUILD_NUMBER: ${{ inputs.build }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
+      APP_SIGNED_ROOT: ${{ vars.APP_SIGNED_ROOT }}
+      PUBLIC_TRUST: ${{ vars.PUBLIC_TRUST }}
+      OTA_BUCKET: ${{ vars.OTA_BUCKET }}
+      TESTED_FROM_BUILD: ${{ inputs.tested_from }}
+      HARDWARE_REPORT: ${{ inputs.hardware_report }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: python3 release/pixel10/apps.py
+        env:
+          GH_TOKEN: ${{ github.token }}
