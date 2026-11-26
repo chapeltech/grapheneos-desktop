@@ -4,9 +4,9 @@
   "manifest_tag": "e5681d7438f52a75819d1f34f8d738fcaa54654c",
   "settings_revision": "b6ef57550748eb6f54ebab4914c6e630a20fd07a",
   "update_url": "https://repo.chapeltech.uk/android/",
-  "styx11": "fa0c7cb21168f49d33405a5a04bdf81ffdb4ae44",
+  "styx11": "f644a0372f1b3aabbd935645a1d1369b79c5ef6f",
   "forks": {
-    "frameworks/base": ["platform_frameworks_base", "883c736058ef18cc511ab045492e617bd0e089f2"],
+    "frameworks/base": ["platform_frameworks_base", "db028b7ac710ca68c5ef430c452092ffb91e4392"],
     "frameworks/native": ["platform_frameworks_native", "d6a6aafb39127fdc6ded41871c0dabd3b9c080e0"],
     "packages/apps/Launcher3": ["platform_packages_apps_Launcher3", "1990f552f738c7ed0ae79cdf5aa6d5787a8d239d"]
   }

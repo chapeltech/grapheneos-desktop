@@ -6,9 +6,8 @@ Owner: chapeltech/grapheneos-desktop. Public updater base:
 
 ## One-time operator setup
 
-* Publish the three fork commits from pins.json on their existing new
-  `desktop/pixel10-release-2026111800` refs and the pinned StyX11 revision
-  on `wonad/integration`. Merge the workflows into the protected default
+* Publish the three fork commits and the StyX11 commit from `pins.json` so the
+  runner can fetch them by SHA. Merge the workflows into the protected default
   branch. Preserve existing branch names. The phone release does not use the
   emulator lock, the legacy API-v3 signing pipeline, or workstation paths.
 * Register two dedicated self-hosted Linux runners (labels in the workflows).
