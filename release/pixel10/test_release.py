@@ -227,6 +227,29 @@ class Checks(unittest.TestCase):
             publish.visible("frankel-beta")
             self.assertEqual(open_url.call_args.args[0].full_url, publish.BASE + "frankel-beta")
 
+    def test_documented_linux_install_verifies_split_factory_without_ota(self):
+        folder = self.root
+        install = folder / f"frankel-install-{BUILD}.zip"
+        install.write_bytes(b"factory image bytes")
+        sums = folder / "SHA256SUMS"
+        sums.write_text(f"{digest(install)}  {install.name}\n" + "0" * 64 + "  not-downloaded-ota.zip\n")
+        key = folder / "fixture-key"
+        subprocess.run(["ssh-keygen","-q","-t","ed25519","-N","","-f",key], check=True)
+        (folder / "allowed_signers").write_text("pixel10 " + key.with_suffix(".pub").read_text())
+        subprocess.run(["ssh-keygen","-Y","sign","-f",key,"-n","factory images",install],
+                       check=True, capture_output=True)
+        data = install.read_bytes()
+        install.unlink()
+        (folder / (install.name + ".part000")).write_bytes(data[:7])
+        (folder / (install.name + ".part001")).write_bytes(data[7:])
+        instructions = Path(publish.__file__).with_name("INSTALL.md").read_text()
+        command = instructions.split("```bash\n", 1)[1].split("```", 1)[0]
+        command = command.replace("build=YYYYMMDDNN", f"build={BUILD}")
+        subprocess.run(["bash", "-c", command], cwd=folder, check=True, capture_output=True)
+        self.assertEqual(install.read_bytes(), data)
+        install.write_bytes(b"bad")
+        self.assertNotEqual(subprocess.run(["bash","-c",command], cwd=folder, capture_output=True).returncode, 0)
+
     @unittest.skipUnless(shutil.which("javac") and shutil.which("java"), "requires the Android build JDK")
     def test_updater_url_builder(self):
         harness = self.root / "CheckUrls.java"

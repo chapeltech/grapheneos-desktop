@@ -23,8 +23,9 @@ replacing the normal phone interface.
    after successfully flashing and verify the boot-key fingerprint on the
    phone before entering personal data.
 4. From [GitHub Releases](https://github.com/chapeltech/grapheneos-desktop/releases),
-   choose the newest Stable `desktop-apps-0.1-YYYYMMDDNN` release whose OS
-   range includes your build. Download `desktop-updates.apk` and compare
+   choose the newest `desktop-apps-0.1-YYYYMMDDNN` release whose OS range
+   includes your build. Choose Stable for normal use, or a compatible
+   prerelease if you are testing Beta. Download `desktop-updates.apk` and compare
    its APK signing certificate with the independently obtained ChapelTech
    **updater** fingerprint (`apksigner verify --print-certs desktop-updates.apk`)
    before installing. Open **ChapelTech Desktop Updates**, select **Allow
