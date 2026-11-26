@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 from source import PINS
 from verify import digest, require, verify
 from apps import verify_catalog
+import ota_publication as pointers
 
 LIMIT = 2**31
 BASE = PINS["update_url"]
@@ -48,20 +49,31 @@ def newer(old, build, stamp, channel):
 
 
 def visible(path, first_byte=False):
-    req = Request(BASE + path, headers={"Range":"bytes=0-0"} if first_byte else {})
+    if path.endswith(".zip"):
+        match = re.fullmatch(r"frankel-(?:ota_update|incremental-[0-9]+)-(20[0-9]{8})\.zip", path)
+        require(match is not None, "invalid OTA asset")
+        url = f'{PINS["ota_download_url"]}frankel-0.1-{match[1]}/{path}'
+    else:
+        url = BASE + path
+    req = Request(url, headers={"Range":"bytes=0-0"} if first_byte else {})
     response = urlopen(req, timeout=120)
     require(response.url.startswith("https://"), "insecure redirect")
     return response
 
 
-def channel_text(channel):
+def public_metadata(name):
     try:
-        with visible("frankel-"+channel) as r:
-            return r.read(256).decode()
+        with visible(name) as r:
+            return r.read(32769)
     except HTTPError as e:
         if e.code != 404:
             raise
         return None
+
+
+def channel_text(channel):
+    value = public_metadata("frankel-" + channel)
+    return value.decode() if value is not None else None
 
 
 def publish():
@@ -74,20 +86,13 @@ def publish():
     tag = "frankel-0.1-" + build
     ota = d / f"frankel-ota_update-{build}.zip"
     key = "frankel-" + channel
-    bucket = env["OTA_BUCKET"]
-    def aws(*args, **kw):
-        return sp.check_output(["aws","s3api",*args,"--bucket",bucket], text=True, **kw)
+    require(ota.stat().st_size < LIMIT, "full OTA does not fit in a single GitHub Release asset")
     def gh(*args):
         return sp.check_output(["gh", *args], text=True)
-    # Read through both paths. CAS against the exact bytes/version observed, not a stale CDN.
-    old = channel_text(channel)
+    old_bytes, old_sha = pointers.read(key)
+    old = old_bytes.decode() if old_bytes is not None else None
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        cas = ["--if-none-match", "*"]
-        if old is not None:
-            obj = json.loads(aws("get-object","--key",key,str(tmp/"prior")))
-            require((tmp/"prior").read_text() == old, "origin and public channel disagree")
-            cas = ["--if-match", obj["ETag"]]
         release = f"{build} {stamp} frankel {channel}\n"
         if old != release:
             newer(old, build, stamp, channel)
@@ -126,13 +131,6 @@ def publish():
         actual = json.loads(gh("api",f"repos/{{owner}}/{{repo}}/releases/tags/{tag}"))
         require(not actual["draft"] and {a["name"]:a["digest"] for a in actual["assets"]} == expected,
                 "published release differs from offline handoff")
-        # Prefer an immutable origin write; retries verify the previously uploaded object.
-        if channel == "beta":
-            try:
-                aws("put-object","--if-none-match","*","--key",ota.name,"--body",str(ota))
-            except sp.CalledProcessError:
-                # Don't accept an AWS error as evidence that a valid object already exists.
-                aws("head-object","--key",ota.name)
         try:
             with visible("frankel-incremental-0-"+build+".zip"):
                 raise ValueError("nonexistent incrementals must return HTTP 404")
@@ -143,10 +141,9 @@ def publish():
                     "update host does not support correct byte ranges")
         with visible(ota.name) as r:
             require(hashlib.file_digest(r,"sha256").hexdigest() == digest(ota), "bad publicly served OTA")
-        metadata = tmp/"metadata"
-        metadata.write_text(release)
         if old != release:
-            aws("put-object","--key",key,"--body",str(metadata),"--cache-control","no-store",*cas)
+            pointers.write(key, release.encode(), old_sha)
+        pointers.wait_visible(key, release.encode(), public_metadata)
         if channel == "stable":
             gh("release","edit",tag,"--prerelease=false","--latest")
 

@@ -7,14 +7,14 @@ as the signer or put keys or key passwords in GitHub Actions secrets.
 
 ## GitHub setup
 
-1. Protect `master` and require review of changes to the release workflows
+1. Protect `release/pixel10` and require review of changes to the release workflows
    and scripts. Create the `pixel10-sign` environment, allow only deploys
-   from `master`, require a reviewer, and disable administrator bypass.
+   from `release/pixel10`, require a reviewer, and disable administrator bypass.
    For two-person control, prohibit approval by the person who dispatched
    the run. Leave the hardware-review requirement on `pixel10-stable`.
 2. Create the organization runner group `pixel10-signers`. Allow only
    `chapeltech/grapheneos-desktop` and the workflow
-   `chapeltech/grapheneos-desktop/.github/workflows/pixel10-publish.yml@refs/heads/master`.
+   `chapeltech/grapheneos-desktop/.github/workflows/pixel10-publish.yml@refs/heads/release/pixel10`.
    Register the dedicated host in this group with the label `pixel10-signer`.
    Do not register it in a general-purpose group or allow PR jobs on it.
 3. When the host setup is verified, set the repository Actions variable
@@ -71,7 +71,7 @@ This matters because the GrapheneOS release script executes the build's
 `otatools` archive. A checksum proves which bytes were approved, not that an
 untrusted build is safe. Never accept arbitrary otatools or GitHub artifacts.
 
-Dispatch **Sign and publish Pixel 10 release** on `master` with the build,
+Dispatch **Sign and publish Pixel 10 release** on `release/pixel10` with the build,
 source commit, and unsigned digest. Use **sign-only** for the first trial;
 **beta** signs and publishes. Review the identity in the preflight summary
 before approving `pixel10-sign`. Re-dispatching Beta for the exact handoff

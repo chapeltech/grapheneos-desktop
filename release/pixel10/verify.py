@@ -7,6 +7,7 @@ import re
 import subprocess as sp
 import sys
 from zipfile import ZipFile
+from ota_publication import RAW
 
 def require(condition, message):
     if not condition:
@@ -25,7 +26,7 @@ def signature(trust, data, sig, namespace):
 
 
 def inventory(directory, build):
-    names = {"source-commit", "build-number", "unsigned-inputs-sha256", "native-inputs-sha256",
+    names = {"source-commit", "build-number", "unsigned-inputs-sha256", "native-inputs-sha256", "ota-origin",
              "controller.apk", "styx.apk", "xmonad.apk", f"frankel-install-{build}.zip",
              f"frankel-install-{build}.zip.sig", f"frankel-ota_update-{build}.zip"}
     require({p.name for p in directory.iterdir()} == names | {"SHA256SUMS", "SHA256SUMS.sig"},
@@ -57,6 +58,7 @@ def verify(d, trust, build, commit, unsigned_hash):
             and re.fullmatch("[0-9a-f]{64}", unsigned_hash), "invalid release identity")
     signature(trust, d / "SHA256SUMS", d / "SHA256SUMS.sig", "chapeltech-pixel10-release")
     inventory(d, build)
+    require((d / "ota-origin").read_text() == RAW + "\n", "wrong OS OTA origin")
     for name, value in (("source-commit", commit), ("build-number", build), ("unsigned-inputs-sha256", unsigned_hash)):
         require((d/name).read_text() == value + "\n", "wrong " + name)
     install = d / f"frankel-install-{build}.zip"

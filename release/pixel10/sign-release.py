@@ -78,7 +78,7 @@ def stage_unsigned(source, staged, build, commit, digest, expected=UNSIGNED_FILE
 def signed_identity(path, build, commit, digest):
     archive = f"frankel-install-{build}.zip"
     names = {"controller.apk", "styx.apk", "xmonad.apk", "build-number", "source-commit",
-             "native-inputs-sha256", "unsigned-inputs-sha256", "SHA256SUMS", "SHA256SUMS.sig",
+             "native-inputs-sha256", "unsigned-inputs-sha256", "ota-origin", "SHA256SUMS", "SHA256SUMS.sig",
              archive, archive + ".sig", f"frankel-ota_update-{build}.zip"}
     require(not path.is_symlink() and {p.name for p in path.iterdir()} == names and
             all(p.is_file() and not p.is_symlink() for p in path.iterdir()),

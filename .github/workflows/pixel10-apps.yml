@@ -47,8 +47,8 @@ jobs:
           bash -n release/pixel10/build-apps.sh
           python3 -m unittest discover -vs release/pixel10
           [[ "$OPERATION" == validate ]] && exit 0
-          [[ "$GITHUB_REF" == refs/heads/master && "$REF_PROTECTED" == true ]] || {
-            echo 'Protect master before using the app release workflow.' >&2; exit 1;
+          [[ "$GITHUB_REF" == refs/heads/release/pixel10 && "$REF_PROTECTED" == true ]] || {
+            echo 'Protect release/pixel10 before using the app release workflow.' >&2; exit 1;
           }
           [[ "$BUILD_NUMBER" =~ ^20[0-9]{8}$ ]]
           [[ "$OPERATION" == build ]] && exit 0
@@ -113,7 +113,6 @@ jobs:
       UNSIGNED_SUMS_SHA256: ${{ inputs.unsigned_digest }}
       APP_SIGNED_ROOT: ${{ vars.APP_SIGNED_ROOT }}
       PUBLIC_TRUST: ${{ vars.PUBLIC_TRUST }}
-      OTA_BUCKET: ${{ vars.OTA_BUCKET }}
       TESTED_FROM_BUILD: ${{ inputs.tested_from }}
       HARDWARE_REPORT: ${{ inputs.hardware_report }}
     steps:

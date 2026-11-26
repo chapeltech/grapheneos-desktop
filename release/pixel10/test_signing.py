@@ -100,6 +100,7 @@ class Signing(unittest.TestCase):
                          "native-inputs-sha256"):
                 (signed / name).write_bytes((unsigned / name).read_bytes())
             (signed / "unsigned-inputs-sha256").write_text(self.digest + "\n")
+            (signed / "ota-origin").write_text("fixture\n")
             for name in ("SHA256SUMS", "SHA256SUMS.sig", f"frankel-install-{BUILD}.zip",
                          f"frankel-install-{BUILD}.zip.sig", f"frankel-ota_update-{BUILD}.zip"):
                 (signed / name).write_text("fixture")
