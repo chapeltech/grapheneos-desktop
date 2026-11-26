@@ -167,9 +167,19 @@ def public_or_missing(name):
         return None
 
 
+def verify_prior_catalog(old, channel, trust):
+    prev = verify_catalog(old, trust / "app-catalog.pem", channel)
+    desktop, updater = digest(trust / "desktop.der"), digest(trust / "updater.der")
+    require(set(prev["apps"]) == set(APPS), "previous catalog has the wrong APK inventory")
+    for name in APPS:
+        require(prev["apps"][name]["certificate"] == (updater if name == UPDATER else desktop),
+                f"APK signing identity differs from {channel} build {prev['build']}: {name}")
+    return prev
+
+
 def check_advance(old, channel, trust, new, build):
     if old is not None and old != new:
-        prev = verify_catalog(old, trust / "app-catalog.pem", channel)
+        prev = verify_prior_catalog(old, channel, trust)
         require(prev["build"] < build, "duplicate or downgrade")
 
 
@@ -182,6 +192,10 @@ def publish():
     payload = verify_release(root, trust, build, commit, env["UNSIGNED_SUMS_SHA256"], channel, int(time.time()))
     old, old_sha = pointers.read(name)
     check_advance(old, channel, trust, candidate, build)
+    other_channel = "stable" if channel == "beta" else "beta"
+    other, _ = pointers.read(catalog_name(other_channel))
+    if other is not None:
+        verify_prior_catalog(other, other_channel, trust)
 
     def gh(*args):
         return sp.check_output(["gh", *args], text=True)
