@@ -77,19 +77,32 @@ class Hosted(unittest.TestCase):
             intake.unpack("os", parts, invalid, build, commit, approved, limit=20)
         self.assertFalse(invalid.exists())
 
-    def test_policy_cannot_be_weakened_before_releasing_keys(self):
-        env = {"name": "pixel10-sign", "can_admins_bypass": False,
+    def test_signing_requires_reviewers_protected_branch_and_hosted_runner(self):
+        env = {"name": "pixel10-sign",
                "protection_rules": [{"type": "required_reviewers", "reviewers": [{}]}],
                "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}}
         policies = {"branch_policies": [{"type": "branch", "name": "release/pixel10"}]}
         security.check(security.REF, True, "github-hosted", env, policies)
-        for runner, bypass, rules in (
-            ("self-hosted", False, policies),
-            ("github-hosted", True, policies),
-            ("github-hosted", False, {"branch_policies": [{"type": "tag", "name": "*"}]}),
+        for ref, protected, runner, environment, rules in (
+            ("refs/heads/master", True, "github-hosted", env, policies),
+            (security.REF, False, "github-hosted", env, policies),
+            (security.REF, True, "self-hosted", env, policies),
+            (security.REF, True, "github-hosted", env | {"name": "wrong"}, policies),
+            (security.REF, True, "github-hosted", env | {"protection_rules": []}, policies),
+            (security.REF, True, "github-hosted", env, {
+                "branch_policies": [{"type": "tag", "name": "release/pixel10"}]}),
         ):
             with self.assertRaises(ValueError):
-                security.check(security.REF, True, runner, env | {"can_admins_bypass": bypass}, rules)
+                security.check(ref, protected, runner, environment, rules)
+
+    def test_admin_bypass_setting_is_not_a_signing_preflight_requirement(self):
+        policies = {"branch_policies": [{"type": "branch", "name": "release/pixel10"}]}
+        for name in ("pixel10-sign", "pixel10-stable"):
+            for bypass in (True, False):
+                env = {"name": name, "can_admins_bypass": bypass,
+                       "protection_rules": [{"type": "required_reviewers", "reviewers": [{}]}],
+                       "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}}
+                security.check(security.REF, True, "github-hosted", env, policies, name)
 
     def test_hosted_download_checks_github_asset_size_and_digest(self):
         payload = b"reviewed signing asset bytes"

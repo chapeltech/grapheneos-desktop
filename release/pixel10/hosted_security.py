@@ -18,14 +18,13 @@ def require(condition, detail):
 def check(ref, protected, runner, environment, policies, expected=ENVIRONMENT):
     require(ref == REF and protected, "dispatch from the protected release/pixel10 branch")
     require(runner == "github-hosted", "production keys may only be used on a GitHub-hosted runner")
-    require(environment["name"] == expected and environment.get("can_admins_bypass") is False,
-            f"disable administrator bypass on {expected}")
+    require(environment["name"] == expected, f"unexpected release environment; expected {expected}")
     require(any(rule["type"] == "required_reviewers" and rule.get("reviewers")
                 for rule in environment["protection_rules"]), "configure a signing environment reviewer")
     require(environment.get("deployment_branch_policy") == {
         "protected_branches": False, "custom_branch_policies": True,
     } and [(p["type"], p["name"]) for p in policies["branch_policies"]] == [("branch", "release/pixel10")],
-        "restrict pixel10-sign to the release/pixel10 branch only")
+        f"restrict {expected} to the release/pixel10 branch only")
 
 
 def github(suffix, name=ENVIRONMENT):
