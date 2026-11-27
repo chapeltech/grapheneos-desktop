@@ -2,9 +2,44 @@
 
 Build on the existing dedicated **build** runner without signing credentials.
 Both OS and app release jobs run on disposable GitHub-hosted runners. Production
-private keys are held as GitHub environment secrets, not in Git, release assets,
-Actions artifacts, or on the build host. No signing or publishing server is
+keys are held as GitHub environment secrets. Plaintext keys never enter Git,
+release assets, Actions artifacts, or the build host. No signing or publishing server is
 required. The public OS and app OTA pointers live on the `ota` branch.
+
+## Generate the first keyset on GitHub
+
+After setting up the protected branch and `pixel10-sign` environment below,
+run this once from a checkout of the reviewed release branch. This path is
+only for an empty signing environment and a never-published device fleet.
+
+```sh
+repo=chapeltech/grapheneos-desktop
+recipient=$(gh api "repos/$repo/environments/pixel10-sign/secrets/public-key")
+gh workflow run pixel10-apps.yml --repo "$repo" --ref release/pixel10 \
+  -f operation=bootstrap-keys \
+  -f "seal_key_id=$(jq -r .key_id <<< "$recipient")" \
+  -f "seal_public_key=$(jq -r .key <<< "$recipient")"
+```
+
+Approve the bootstrap job in GitHub. It generates the keys on a hosted
+runner and uploads only the public trust files and five slots encrypted
+to GitHub's environment public key. Keep the run ID and reviewed source
+commit. From a shell whose GitHub credentials can write environment secrets:
+
+```sh
+gh run download "$run" --repo "$repo" \
+  --name "pixel10-sealed-signing-$run-$attempt" --dir "$bootstrap"
+python3 release/pixel10/hosted_bootstrap.py install "$bootstrap" "$run" "$commit"
+```
+
+`$run` is the successful run ID, `$attempt` is its attempt number (usually
+1), `$commit` is the approved full release-branch commit, and `$bootstrap`
+is a new local directory. The command will not overwrite a signing slot.
+Open a reviewed PR for the files in `"$bootstrap/trust"` only, then enable
+the signing variables after the trust PR merges. The sealed artifact is
+only a transfer into GitHub, not an independent recovery backup. Never
+publish the ciphertext as a release asset or generate a second keyset for
+phones already installed with the first one.
 
 ## Protect signing and publication
 
