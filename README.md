@@ -6,54 +6,40 @@ replacing the normal phone interface.
 
 ## Install on a Pixel 10
 
-1. **Back up first.** Unlocking **and relocking** erase the phone. Make sure
-   **OEM unlocking** is available and never downgrade its firmware.
-2. Open [GitHub Releases](https://github.com/chapeltech/grapheneos-desktop/releases).
-   Use the [latest Stable OS release](https://github.com/chapeltech/grapheneos-desktop/releases/latest),
-   tagged `frankel-0.1-YYYYMMDDNN`. If there is no Stable OS release, wait
-   unless you are deliberately testing a Beta. Actions artifacts and source
-   ZIPs are not install images.
-3. Download and verify the **factory install** ZIP (or all its numbered
-   parts), its signature, and the signed checksums. Get the release public
-   key and verified-boot fingerprint independently through your ChapelTech
-   administrator, not from the download you are verifying. Follow the exact
-   [verification and flashing commands on the Pixel 10 release branch](https://github.com/chapeltech/grapheneos-desktop/blob/release/pixel10/release/pixel10/INSTALL.md). Use
-   that ZIP's `flash-all` script, not the official GrapheneOS web installer.
-   Stop on any flashing error; never relock a partial flash. Relock only
-   after successfully flashing and verify the boot-key fingerprint on the
-   phone before entering personal data.
-4. From [GitHub Releases](https://github.com/chapeltech/grapheneos-desktop/releases),
-   choose the newest `desktop-apps-0.1-YYYYMMDDNN` release whose OS range
-   includes your build. Choose Stable for normal use, or a compatible
-   prerelease if you are testing Beta. Download `desktop-updates.apk` and compare
-   its APK signing certificate with the independently obtained ChapelTech
-   **updater** fingerprint (`apksigner verify --print-certs desktop-updates.apk`)
-   before installing. Open **ChapelTech Desktop Updates**, select **Allow
-   app installation**, then **Install desktop apps / check now** and
-   approve the Android prompts. This installs Desktop Controller, StyX11 and
-   XMonad together. For a test release, explicitly select **Use Beta app
-   releases** in Desktop Updates.
-5. Open **Settings → Apps → Special app access → External desktop** and
-   approve the installed controller. Connect a monitor, keyboard and mouse,
-   and choose XMonad in Desktop Controller. The phone does not approve a
-   controller automatically.
+Follow the [complete Pixel 10 install guide](https://github.com/chapeltech/grapheneos-desktop/blob/release/pixel10/release/pixel10/INSTALL.md)
+for the phone settings, downloads, verification, and command lines.
+The [first Beta](https://github.com/chapeltech/grapheneos-desktop/releases/tag/frankel-0.1-2026112603)
+has a factory image and three APKs to install manually. It does not include
+Openbox, i3, or `desktop-updates.apk`.
+
+1. **Back up first.** Unlocking and relocking both erase data. Do not downgrade
+   the phone's security patch or firmware. In the existing Android system, tap
+   **Build number** seven times in **Settings → About phone**. Turn on **OEM
+   unlocking** in **Settings → System → Developer options**. USB debugging is
+   not needed for flashing.
+2. From [GitHub Releases](https://github.com/chapeltech/grapheneos-desktop/releases),
+   download the factory ZIP (or every numbered part), its signature, and the
+   signed checksums. Verify them using independently trusted ChapelTech keys.
+   Unlock the bootloader, run the verified archive's `flash-all` script, and
+   relock only after a successful flash. Check the boot-key fingerprint on the
+   phone before entering personal data, and leave OEM unlocking off after setup.
+3. Verify and install `controller.apk`, `styx.apk`, and `xmonad.apk` from the
+   same release. The guide covers installing via **Files** with its temporary
+   **Install unknown apps** permission, or via **ADB** with temporary **USB
+   debugging**. Neither option requires unlocking the bootloader again.
+4. In **Settings → Apps → Special app access → External desktop**, approve
+   **Desktop Controller**. Connect a monitor, keyboard, and mouse, then choose
+   XMonad in Desktop Controller.
 
 ## Updates
 
-- **OS:** **Settings → System → System updates** downloads and applies the
-  selected GrapheneOS OTA channel. Stable is for qualified builds; only select
-  Beta if you are testing. Routine updates do not require USB or a wipe.
-- **Apps:** ChapelTech Desktop Updates checks automatically on unmetered
-  networks, independently of the OS channel. If Android needs confirmation,
-  tap the notification or reopen Desktop Updates and tap **Install desktop
-  apps / check now**. Updates can restart the desktop apps and interrupt
-  running sessions. Turn background updates off in the updater if you want
-  to control when that happens.
-- `controller.apk`, `styx.apk` and `xmonad.apk` are also available for
-  manual recovery. Verify those against the ChapelTech **desktop** APK
-  fingerprint. A manually installed APK may need an Android confirmation
-  when first updated by Desktop Updates. Do not uninstall an app to work
-  around a signature mismatch; doing so can erase its data.
+- **OS:** In **Settings → System → System updates → Release channel**, select
+  **Beta** for a Beta build, or **Stable** for a qualified release. Routine OS
+  updates do not require USB, unlocking, or a wipe.
+- **Apps:** Update the APKs manually for now. When a compatible
+  `desktop-apps-0.1-YYYYMMDDNN` release is published, the install guide explains
+  how to set up its separate **ChapelTech Desktop Updates** APK. Do not uninstall
+  an existing app to work around a signature mismatch.
 
 ## Development
 
