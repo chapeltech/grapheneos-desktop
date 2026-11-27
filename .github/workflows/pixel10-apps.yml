@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Build, sign, publish Beta, promote to Stable, or run checks only
+        description: Build, sign, publish, validate, or generate the first signing keys
         type: choice
-        options: [validate, build, sign-only, beta, stable]
+        options: [validate, bootstrap-keys, build, sign-only, beta, stable]
         default: validate
       build:
         description: App build number (YYYYMMDDNN)
@@ -21,13 +21,67 @@ on:
         description: Stable only - predecessor app build tested on a relocked Pixel 10
       hardware_report:
         description: Stable only - qualification report URL
+      seal_key_id:
+        description: Bootstrap only - GitHub pixel10-sign public key ID
+      seal_public_key:
+        description: Bootstrap only - GitHub pixel10-sign public key
 permissions: {}
 concurrency:
   group: ${{ (inputs.operation == 'validate' || inputs.operation == 'build') && 'frankel-app-preparation' || 'frankel-publication-production' }}
   cancel-in-progress: false
 jobs:
+  bootstrap-keys:
+    if: >-
+      github.repository == 'chapeltech/grapheneos-desktop' &&
+      github.ref == 'refs/heads/release/pixel10' && github.ref_protected &&
+      inputs.operation == 'bootstrap-keys'
+    runs-on: ubuntu-24.04
+    environment: pixel10-sign
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Confirm this is the first signing keyset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          HOSTED_RUNNER: ${{ runner.environment }}
+          HAS_SIGNING_KEYS: >-
+            ${{ secrets.PIXEL10_OS_KEYS_1 != '' || secrets.PIXEL10_OS_KEYS_2 != '' ||
+                secrets.PIXEL10_OS_KEYS_3 != '' || secrets.PIXEL10_APP_KEYS_1 != '' ||
+                secrets.PIXEL10_APP_KEYS_2 != '' }}
+        run: |
+          [[ "$HAS_SIGNING_KEYS" == false && ! -e release/pixel10/trust ]]
+          python3 release/pixel10/hosted_security.py
+          published=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq \
+            '.[] | select(.draft | not) | .tag_name | select(test("^(frankel|desktop-apps)-0[.]1-"))')
+          test -z "$published"
+      - name: Generate and seal the first Pixel 10 signing keys
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+          HOSTED_RUNNER: ${{ runner.environment }}
+          SEAL_KEY_ID: ${{ inputs.seal_key_id }}
+          SEAL_PUBLIC_KEY: ${{ inputs.seal_public_key }}
+        run: |
+          avbtool="$RUNNER_TEMP/pinned-avbtool"
+          curl --fail --silent --show-error --location --max-time 60 \
+            https://raw.githubusercontent.com/GrapheneOS/platform_external_avb/f95721048ae85220ed80b76b7626982455e53d2a/avbtool.py \
+            --output "$avbtool"
+          printf '%s  %s\n' 1aa6f2b462aa67aa3fdf488bee83ab517de8ad9d8228c7b45c35267ab2cf6781 "$avbtool" | sha256sum -c -
+          chmod 700 "$avbtool"
+          python3 release/pixel10/hosted_bootstrap.py generate "$RUNNER_TEMP/sealed-pixel10" "$avbtool"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pixel10-sealed-signing-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sealed-pixel10
+          if-no-files-found: error
+          retention-days: 7
   validate:
-    if: github.repository == 'chapeltech/grapheneos-desktop'
+    if: github.repository == 'chapeltech/grapheneos-desktop' && inputs.operation != 'bootstrap-keys'
     runs-on: ubuntu-24.04
     permissions:
       actions: read
