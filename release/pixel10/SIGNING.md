@@ -10,10 +10,10 @@ required. The public OS and app OTA pointers live on the `ota` branch.
 
 1. Protect `release/pixel10` and require review of changes to release workflows,
    signing scripts, and trust files. In GitHub Settings → Environments, restrict
-   `pixel10-sign` to the literal `release/pixel10` **branch** (not tags),
-   configure a required reviewer, and disable administrator bypass. Configure
-   `pixel10-stable` the same way, with an independent reviewer of the physical
-   hardware report. The Stable environment does not need any key secrets.
+   `pixel10-sign` to the literal `release/pixel10` **branch** (not tags) and
+   configure a required reviewer. Configure `pixel10-stable` the same way,
+   with an independent reviewer of the physical hardware report. The Stable
+   environment does not need any key secrets.
 2. The OS signing job needs at least 40 GiB free. If the default GitHub-hosted
    runner has less, set `PIXEL10_GITHUB_RUNNER` to the organization's
    GH-hosted larger Ubuntu runner. Install Android build tools 35.0.0 on the
