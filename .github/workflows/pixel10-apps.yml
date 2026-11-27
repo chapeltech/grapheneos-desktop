@@ -75,7 +75,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           endpoint="repos/$GITHUB_REPOSITORY/environments/pixel10-sign"
-          gh api "$endpoint" --jq '{name, can_admins_bypass}'
+          gh api "$endpoint" --jq '{name, protection_rules: [.protection_rules[].type]}'
           gh api "$endpoint/deployment-branch-policies" --jq '[.branch_policies[] | {type, name}]'
   build:
     needs: validate
